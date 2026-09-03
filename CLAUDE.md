@@ -10,6 +10,8 @@ Backgammon evaluates them offline (`pipeline/`, Python + uv), the Next.js app qu
 and tracks mistakes in `localStorage`. Phases 1–3 of the original brief are built; see
 `docs/SPEC.md` § Status for what is still open.
 
+Repository: https://github.com/idanbh88/gammon-drill, branch `main`. Commit or push only when asked.
+
 ## Commands
 
 App (repo root, Node 24):

@@ -1,6 +1,6 @@
 # Backgammon Trainer — specification and decision log
 
-Last updated 2026-09-03. `CLAUDE.md` is the short operational guide; this is the reference.
+Last updated 2026-09-03. Repository: https://github.com/idanbh88/gammon-drill (branch `main`). `CLAUDE.md` is the short operational guide; this is the reference.
 
 ## 1. Goal
 
@@ -171,7 +171,6 @@ rules; a problem can carry several tags and always gets at least one. The featur
 ## 9. Open items
 
 - Generate explanations for the seed set (needs an API key) and judge the prompt on real output.
-- The repository is not under version control yet; `git init` and commit before more work.
 - Tune the classifier on a real problem set using the feature log; the rules are first cuts.
 - Try `import_forum.py` on real threads; the Discourse path is untested against a live site.
 - Deeper analysis for hard positions (`--plies 3`, or gnubg rollouts) once sets grow.

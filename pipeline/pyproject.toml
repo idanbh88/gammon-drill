@@ -1,0 +1,24 @@
+[project]
+name = "bg-pipeline"
+version = "0.1.0"
+description = "Offline data pipeline for the backgammon trainer: gnubg analysis, classification, forum import."
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=1.3.0",
+]
+
+[project.optional-dependencies]
+forum = ["requests>=2.32", "beautifulsoup4>=4.12"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+# Not installed as a package: an editable install writes this (non-ASCII) path into a .pth
+# file, which Python 3.10 decodes with the locale code page and then fails to start. The
+# scripts put their own directory on sys.path and pytest uses `pythonpath` below.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

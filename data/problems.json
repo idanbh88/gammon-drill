@@ -1,0 +1,551 @@
+{
+  "name": "seed",
+  "source": "Hand-written Phase 1 seed set. Equities are placeholders until the gnubg pipeline replaces them.",
+  "problems": [
+    {
+      "id": "seed-001",
+      "xgid": "-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10",
+      "type": "checker",
+      "categories": [
+        "opening"
+      ],
+      "explanation": "",
+      "source": "handwritten",
+      "analysis": {
+        "engine": "gnubg",
+        "plies": 2,
+        "analysedAt": "2026-09-03",
+        "positionClass": "contact"
+      },
+      "answers": [
+        {
+          "id": "8/5 6/5",
+          "label": "8/5 6/5",
+          "equity": 0.2198,
+          "equityLoss": 0.0,
+          "probs": {
+            "win": 0.5515,
+            "winGammon": 0.1698,
+            "winBackgammon": 0.0085,
+            "loseGammon": 0.117,
+            "loseBackgammon": 0.0048
+          }
+        },
+        {
+          "id": "24/23 13/10",
+          "label": "24/23 13/10",
+          "equity": -0.0108,
+          "equityLoss": 0.2307,
+          "probs": {
+            "win": 0.4961,
+            "winGammon": 0.1391,
+            "winBackgammon": 0.0064,
+            "loseGammon": 0.1379,
+            "loseBackgammon": 0.0062
+          }
+        },
+        {
+          "id": "24/20",
+          "label": "24/20",
+          "equity": -0.0256,
+          "equityLoss": 0.2455,
+          "probs": {
+            "win": 0.4943,
+            "winGammon": 0.1274,
+            "winBackgammon": 0.0054,
+            "loseGammon": 0.1338,
+            "loseBackgammon": 0.0051
+          }
+        },
+        {
+          "id": "13/9",
+          "label": "13/9",
+          "equity": -0.0261,
+          "equityLoss": 0.246,
+          "probs": {
+            "win": 0.4903,
+            "winGammon": 0.1444,
+            "winBackgammon": 0.0069,
+            "loseGammon": 0.1411,
+            "loseBackgammon": 0.0072
+          }
+        },
+        {
+          "id": "13/10 6/5",
+          "label": "13/10 6/5",
+          "equity": -0.0276,
+          "equityLoss": 0.2474,
+          "probs": {
+            "win": 0.4951,
+            "winGammon": 0.1385,
+            "winBackgammon": 0.0072,
+            "loseGammon": 0.1461,
+            "loseBackgammon": 0.0098
+          }
+        },
+        {
+          "id": "24/23 24/21",
+          "label": "24/23 24/21",
+          "equity": -0.0406,
+          "equityLoss": 0.2604,
+          "probs": {
+            "win": 0.4912,
+            "winGammon": 0.124,
+            "winBackgammon": 0.005,
+            "loseGammon": 0.1348,
+            "loseBackgammon": 0.0047
+          }
+        }
+      ],
+      "features": {
+        "position_class": "contact",
+        "contact": true,
+        "pips_me": 167,
+        "pips_them": 167,
+        "pip_diff": 0,
+        "back_me": 2,
+        "back_them": 2,
+        "anchors_me": "24",
+        "anchors_them": "1",
+        "home_points_me": 1,
+        "home_points_them": 1,
+        "prime_me": 1,
+        "prime_them": 1,
+        "bar_me": 0,
+        "bar_them": 0,
+        "can_hit": false
+      }
+    },
+    {
+      "id": "seed-002",
+      "xgid": "-b----E-C---eE---c-e----B-:0:0:1:63:0:0:0:7:10",
+      "type": "checker",
+      "categories": [
+        "opening"
+      ],
+      "explanation": "",
+      "source": "handwritten",
+      "analysis": {
+        "engine": "gnubg",
+        "plies": 2,
+        "analysedAt": "2026-09-03",
+        "positionClass": "contact"
+      },
+      "answers": [
+        {
+          "id": "24/18 13/10",
+          "label": "24/18 13/10",
+          "equity": 0.0133,
+          "equityLoss": 0.0,
+          "probs": {
+            "win": 0.5061,
+            "winGammon": 0.1325,
+            "winBackgammon": 0.0061,
+            "loseGammon": 0.136,
+            "loseBackgammon": 0.0058
+          }
+        },
+        {
+          "id": "24/15",
+          "label": "24/15",
+          "equity": -0.0028,
+          "equityLoss": 0.0161,
+          "probs": {
+            "win": 0.504,
+            "winGammon": 0.1232,
+            "winBackgammon": 0.0045,
+            "loseGammon": 0.1348,
+            "loseBackgammon": 0.0048
+          }
+        },
+        {
+          "id": "24/21 13/7",
+          "label": "24/21 13/7",
+          "equity": -0.0422,
+          "equityLoss": 0.0554,
+          "probs": {
+            "win": 0.4883,
+            "winGammon": 0.1339,
+            "winBackgammon": 0.0067,
+            "loseGammon": 0.1374,
+            "loseBackgammon": 0.0065
+          }
+        },
+        {
+          "id": "24/21 24/18",
+          "label": "24/21 24/18",
+          "equity": -0.0532,
+          "equityLoss": 0.0665,
+          "probs": {
+            "win": 0.4923,
+            "winGammon": 0.1208,
+            "winBackgammon": 0.0055,
+            "loseGammon": 0.1452,
+            "loseBackgammon": 0.0047
+          }
+        },
+        {
+          "id": "13/4",
+          "label": "13/4",
+          "equity": -0.0611,
+          "equityLoss": 0.0744,
+          "probs": {
+            "win": 0.482,
+            "winGammon": 0.1386,
+            "winBackgammon": 0.0073,
+            "loseGammon": 0.1438,
+            "loseBackgammon": 0.0075
+          }
+        },
+        {
+          "id": "13/10 13/7",
+          "label": "13/10 13/7",
+          "equity": -0.0874,
+          "equityLoss": 0.1007,
+          "probs": {
+            "win": 0.4766,
+            "winGammon": 0.1387,
+            "winBackgammon": 0.0084,
+            "loseGammon": 0.1505,
+            "loseBackgammon": 0.01
+          }
+        }
+      ],
+      "features": {
+        "position_class": "contact",
+        "contact": true,
+        "pips_me": 167,
+        "pips_them": 167,
+        "pip_diff": 0,
+        "back_me": 2,
+        "back_them": 2,
+        "anchors_me": "24",
+        "anchors_them": "1",
+        "home_points_me": 1,
+        "home_points_them": 1,
+        "prime_me": 1,
+        "prime_them": 1,
+        "bar_me": 0,
+        "bar_them": 0,
+        "can_hit": false
+      }
+    },
+    {
+      "id": "seed-003",
+      "xgid": "---BCCD-B-A--a-a-b-dcca---:0:0:1:00:2:1:0:7:10",
+      "type": "cube",
+      "categories": [
+        "racing-cube"
+      ],
+      "explanation": "",
+      "source": "handwritten",
+      "analysis": {
+        "engine": "gnubg",
+        "plies": 2,
+        "analysedAt": "2026-09-03",
+        "positionClass": "race"
+      },
+      "answers": [
+        {
+          "id": "double-take",
+          "label": "Double, take",
+          "equity": 0.792,
+          "equityLoss": 0.0,
+          "probs": {
+            "win": 0.759,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        },
+        {
+          "id": "no-double",
+          "label": "No double, take",
+          "equity": 0.752,
+          "equityLoss": 0.04,
+          "probs": {
+            "win": 0.759,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        },
+        {
+          "id": "double-pass",
+          "label": "Double, pass",
+          "equity": 1.0,
+          "equityLoss": 0.208,
+          "probs": {
+            "win": 0.759,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        },
+        {
+          "id": "too-good",
+          "label": "No double, pass (too good)",
+          "equity": 0.752,
+          "equityLoss": 0.248,
+          "probs": {
+            "win": 0.759,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        }
+      ],
+      "features": {
+        "position_class": "race",
+        "contact": false,
+        "pips_me": 83,
+        "pips_them": 92,
+        "pip_diff": 9,
+        "back_me": 0,
+        "back_them": 0,
+        "anchors_me": "",
+        "anchors_them": "",
+        "home_points_me": 4,
+        "home_points_them": 3,
+        "prime_me": 0,
+        "prime_them": 0,
+        "bar_me": 0,
+        "bar_them": 0,
+        "can_hit": false
+      }
+    },
+    {
+      "id": "seed-004",
+      "xgid": "-b---BD-C---dD---c-cba--AA:0:0:1:43:0:0:0:7:10",
+      "type": "checker",
+      "categories": [
+        "early-game",
+        "hit-or-not"
+      ],
+      "explanation": "",
+      "source": "handwritten",
+      "analysis": {
+        "engine": "gnubg",
+        "plies": 2,
+        "analysedAt": "2026-09-03",
+        "positionClass": "contact"
+      },
+      "answers": [
+        {
+          "id": "bar/21* 24/21",
+          "label": "bar/21* 24/21",
+          "equity": 0.4739,
+          "equityLoss": 0.0,
+          "probs": {
+            "win": 0.6069,
+            "winGammon": 0.1961,
+            "winBackgammon": 0.0118,
+            "loseGammon": 0.0777,
+            "loseBackgammon": 0.0021
+          }
+        },
+        {
+          "id": "bar/21* 13/10",
+          "label": "bar/21* 13/10",
+          "equity": 0.3345,
+          "equityLoss": 0.1393,
+          "probs": {
+            "win": 0.5698,
+            "winGammon": 0.2018,
+            "winBackgammon": 0.0166,
+            "loseGammon": 0.1078,
+            "loseBackgammon": 0.0048
+          }
+        },
+        {
+          "id": "bar/21*/18",
+          "label": "bar/21*/18",
+          "equity": 0.325,
+          "equityLoss": 0.1488,
+          "probs": {
+            "win": 0.5746,
+            "winGammon": 0.1829,
+            "winBackgammon": 0.013,
+            "loseGammon": 0.1069,
+            "loseBackgammon": 0.0039
+          }
+        },
+        {
+          "id": "bar/21* 8/5",
+          "label": "bar/21* 8/5",
+          "equity": 0.3085,
+          "equityLoss": 0.1654,
+          "probs": {
+            "win": 0.5651,
+            "winGammon": 0.1949,
+            "winBackgammon": 0.0145,
+            "loseGammon": 0.1074,
+            "loseBackgammon": 0.004
+          }
+        },
+        {
+          "id": "bar/21* 6/3",
+          "label": "bar/21* 6/3",
+          "equity": 0.1807,
+          "equityLoss": 0.2931,
+          "probs": {
+            "win": 0.5369,
+            "winGammon": 0.1759,
+            "winBackgammon": 0.0148,
+            "loseGammon": 0.1241,
+            "loseBackgammon": 0.0063
+          }
+        },
+        {
+          "id": "bar/22 13/9",
+          "label": "bar/22 13/9",
+          "equity": -0.1251,
+          "equityLoss": 0.599,
+          "probs": {
+            "win": 0.4719,
+            "winGammon": 0.1507,
+            "winBackgammon": 0.0089,
+            "loseGammon": 0.1789,
+            "loseBackgammon": 0.0098
+          }
+        }
+      ],
+      "features": {
+        "position_class": "contact",
+        "contact": true,
+        "pips_me": 159,
+        "pips_them": 156,
+        "pip_diff": -3,
+        "back_me": 2,
+        "back_them": 2,
+        "anchors_me": "",
+        "anchors_them": "1",
+        "home_points_me": 2,
+        "home_points_them": 2,
+        "prime_me": 2,
+        "prime_them": 2,
+        "bar_me": 1,
+        "bar_them": 0,
+        "can_hit": true
+      }
+    },
+    {
+      "id": "seed-005",
+      "xgid": "--ABCBB------------bcb-ba-:1:-1:-1:52:2:3:0:7:10",
+      "type": "checker",
+      "categories": [
+        "bearing-off"
+      ],
+      "explanation": "",
+      "source": "handwritten",
+      "analysis": {
+        "engine": "gnubg",
+        "plies": 2,
+        "analysedAt": "2026-09-03",
+        "positionClass": "bearoff"
+      },
+      "answers": [
+        {
+          "id": "5/off 2/off",
+          "label": "5/off 2/off",
+          "equity": 0.696,
+          "equityLoss": 0.0,
+          "probs": {
+            "win": 0.6822,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        },
+        {
+          "id": "5/3 5/off",
+          "label": "5/3 5/off",
+          "equity": 0.6055,
+          "equityLoss": 0.0905,
+          "probs": {
+            "win": 0.6477,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        },
+        {
+          "id": "6/4 5/off",
+          "label": "6/4 5/off",
+          "equity": 0.5327,
+          "equityLoss": 0.1633,
+          "probs": {
+            "win": 0.6235,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        },
+        {
+          "id": "6/1 2/off",
+          "label": "6/1 2/off",
+          "equity": 0.4971,
+          "equityLoss": 0.199,
+          "probs": {
+            "win": 0.6102,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        },
+        {
+          "id": "5/off 4/2",
+          "label": "5/off 4/2",
+          "equity": 0.4785,
+          "equityLoss": 0.2175,
+          "probs": {
+            "win": 0.6026,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        },
+        {
+          "id": "6/1 5/3",
+          "label": "6/1 5/3",
+          "equity": 0.4428,
+          "equityLoss": 0.2532,
+          "probs": {
+            "win": 0.5901,
+            "winGammon": 0.0,
+            "winBackgammon": 0.0,
+            "loseGammon": 0.0,
+            "loseBackgammon": 0.0
+          }
+        }
+      ],
+      "features": {
+        "position_class": "bearoff",
+        "contact": false,
+        "pips_me": 40,
+        "pips_them": 42,
+        "pip_diff": 2,
+        "back_me": 0,
+        "back_them": 0,
+        "anchors_me": "",
+        "anchors_them": "",
+        "home_points_me": 4,
+        "home_points_them": 4,
+        "prime_me": 0,
+        "prime_them": 0,
+        "bar_me": 0,
+        "bar_them": 0,
+        "can_hit": false
+      }
+    }
+  ]
+}

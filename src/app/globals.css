@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --color-felt: #2f5d3a;
+  --color-felt-dark: #24492d;
+  --color-frame: #5a3a1e;
+  --color-frame-dark: #3e2814;
+  --color-point-light: #d9c8a3;
+  --color-point-dark: #8b5a2b;
+  --color-blue-checker: #2b5fd9;
+  --color-blue-checker-dark: #1b3f99;
+  --color-white-checker: #f3efe4;
+  --color-white-checker-dark: #b8b2a2;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-stone-100 text-stone-900 antialiased;
+}

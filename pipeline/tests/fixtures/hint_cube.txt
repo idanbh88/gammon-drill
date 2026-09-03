@@ -1,0 +1,68 @@
+GNU Backgammon 1.08.003-mingw 32-Bit 20240428
+
+Copyright (C) 1999-2004 Gary Wong.
+Copyright (C) 2004-2024 the AUTHORS; for details type `show version'.
+
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show warranty'.
+This is free software, and you are welcome to redistribute it under certain conditions; type `show copying' for details.
+
+Locale is now 'English_United States.1252'
+Will not automatically start games.
+Will not automatically roll the dice.
+Match evaluations will be shown as equivalent money equity.
+Match winning chances will be shown as probabilities.
+`eval' and `hint' chequerplay will use 2 ply evaluation.
+`eval' and `hint' cube decisions will use 2 ply evaluation.
+ GNU Backgammon  Position ID: dPdMAgDs7pkAAA
+                 Match ID   : cAngABAAEAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ | O     O     O    |   | O  O  O  O       |     1 point
+ |             O    |   | O  O  O          |     
+ |                  |   | O  O  O          |     
+ |                  |   | O                |     
+ |                  |   |                  |    
+v|                  |BAR|                  |     7 points match (Cube: 1)
+ |                  |   |                  |    
+ |                  |   | X                |     
+ |                  |   | X  X  X          |     
+ |             X    |   | X  X  X  X       |     On roll
+ |       X     X    |   | X  X  X  X       |     2 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: עידן
+
+
+Cube analysis
+2-ply cubeless equity +0.518 (Money: +0.518)
+  0.759 0.000 0.000 - 0.241 0.000 0.000
+Cubeful equities:
+1. Double, take        +0.792
+2. Double, pass        +1.000  (+0.208)
+3. No double           +0.752  (-0.040)
+Proper cube action: Double, take
+
+SetMatchID cannot handle positions where a double has been offered.
+Stepping back to the offering of the cube.  GNU Backgammon  Position ID: dPdMAgDs7pkAAA
+                 Match ID   : cAngABAAEAAE
+ +13-14-15-16-17-18------19-20-21-22-23-24-+     O: gnubg
+ | O     O     O    |   | O  O  O  O       |     1 point
+ |             O    |   | O  O  O          |     
+ |                  |   | O  O  O          |     
+ |                  |   | O                |     
+ |                  |   |                  |    
+v|                  |BAR|                  |     7 points match (Cube: 1)
+ |                  |   |                  |    
+ |                  |   | X                |     
+ |                  |   | X  X  X          |     
+ |             X    |   | X  X  X  X       |     On roll
+ |       X     X    |   | X  X  X  X       |     2 points
+ +12-11-10--9--8--7-------6--5--4--3--2--1-+     X: עידן
+
+
+Cube analysis
+2-ply cubeless equity +0.518 (Money: +0.518)
+  0.759 0.000 0.000 - 0.241 0.000 0.000
+Cubeful equities:
+1. Double, take        +0.792
+2. Double, pass        +1.000  (+0.208)
+3. No double           +0.752  (-0.040)
+Proper cube action: Double, take
+

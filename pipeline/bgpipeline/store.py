@@ -5,8 +5,8 @@ The schema has one home, ``src/lib/store-schema.ts``; this module reads ``SCHEMA
 version so far is additive, so opening a file runs the DDL and bumps ``meta.schema_version``,
 exactly like ``openStore`` in ``src/lib/store.ts``.
 
-Explanations are never touched here. Match rows are reproducible engine output, so
-``delete_match`` exists for a re-import.
+Explanations and their translations are never touched here. Match rows are reproducible
+engine output, so ``delete_match`` exists for a re-import.
 """
 
 from __future__ import annotations

@@ -8,7 +8,8 @@ This file is the short operational guide. Keep both current when behaviour chang
 A quiz app for backgammon checker plays and cube decisions. Positions are XGIDs, GNU
 Backgammon evaluates them offline (`pipeline/`, Python + uv), the Next.js app quizzes the user,
 tracks mistakes in `localStorage`, and writes Claude explanations on demand into
-`data/store.sqlite`. The user's own Backgammon Galaxy matches (`.mat` exports) can be uploaded
+`data/store.sqlite`, each in English with a Hebrew translation under it (the user reads Hebrew
+more easily). The user's own Backgammon Galaxy matches (`.mat` exports) can be uploaded
 at `/matches`: the app runs the Python importer, which replays the match, has gnubg evaluate
 the user's decisions and stores them in the same SQLite file; the match page lists the errors
 with the same explanation panel. Backgammon Galaxy quiz sets (JSON exports, picture-based
@@ -28,7 +29,7 @@ App (repo root, Node 24):
 
 ```bash
 npm run dev        # http://localhost:3000 (quiz), /play (gnubg), /lessons (Galaxy lessons), /stats (progress), /board (all positions), /matches (imported and played matches)
-npm test           # vitest: xgid, board, moves, move-input, game, play-service, play-ui, pr, mistakes, engine (live when gnubg is installed), data, filters, scheduler, store, matches, explain, lessons, lesson-*, pipeline-process, ndjson
+npm test           # vitest: xgid, board, moves, move-input, game, play-service, play-ui, pr, mistakes, engine (live when gnubg is installed), data, filters, scheduler, store, matches, explain, explain-audit, rtl, lessons, lesson-*, pipeline-process, ndjson
 npm run typecheck
 npm run lint
 npm run build
@@ -38,7 +39,9 @@ Explanations need `ANTHROPIC_API_KEY` in a git-ignored `.env` at the repo root (
 `.env.example`); the dev server loads it, the browser never sees it. Generation happens only
 from the button under the answer reveal (quiz) or under a match decision. `GET
 /api/explain?problemId=seed-001` (or a decision id such as `match-45552673-g1-m3-checker`) shows
-the prompt without calling the API. The match upload (`POST /api/matches/import`) needs `uv` on
+the prompt without calling the API. The Hebrew translation is asked for by the panel right after
+a new explanation, or from its "Translate to Hebrew" button for an older one; `GET
+/api/explain/translate?explanationId=12` shows that prompt. The match upload (`POST /api/matches/import`) needs `uv` on
 the dev server's PATH (or `BG_UV`) and gnubg at `C:\gnubg`; the lesson upload
 (`POST /api/lessons/import`) needs `uv` and network access to Galaxy's picture CDN. Playing
 (`POST /api/play`, `GET|POST /api/play/<id>`) needs gnubg only (found like the pipeline does:
@@ -62,13 +65,13 @@ Browser preview: `.claude/launch.json` has the `dev` server. Verify UI changes t
 
 ```
 data/*.json                 problem sets (ProblemSet JSON), data/README.md documents the format
-data/store.sqlite           explanations (append-only, with the effort asked for) + matches / games / decisions + play_state, quiz_picks (schema v4 in src/lib/store-schema.ts)
+data/store.sqlite           explanations (append-only, with the effort asked for) + their Hebrew translations + matches / games / decisions + play_state, quiz_picks (schema v5 in src/lib/store-schema.ts)
 data/matches/               uploaded .mat files, as received
 data/lessons/               GIT-IGNORED Galaxy lessons: lessons.sqlite, <quiz id>/quiz.json (as received), <quiz id>/images/pNN[-cM].png
 src/app/                    page.tsx quiz, play/ new match + [id]/ game, lessons/ list + [id]/ player, stats/ progress, board/ every position rendered, matches/ list + [id]/ review
 src/app/api/play/           route.ts (new match), [id]/route.ts (state, one user action -> graded + gnubg's turn)
 src/app/api/quiz-picks/     route.ts: add a decision of the user to the quiz or take it out
-src/app/api/explain/        route.ts: builds the prompt, calls the Anthropic SDK, inserts the store row
+src/app/api/explain/        route.ts: builds the prompt, calls Claude, inserts the store row; translate/route.ts: the Hebrew translation of a stored explanation
 src/app/api/matches/import/ route.ts: saves the upload, spawns uv run import_match.py, streams its NDJSON progress
 src/app/api/lessons/        import/route.ts (runs import_lessons.py like the match upload), images/[quizId]/[file]/route.ts (serves pictures)
 src/components/             Board.tsx (SVG, hook-free; optional play props: highlights, dice, hidden checkers, overlay, pointer
@@ -94,9 +97,11 @@ src/lib/validate.ts         semantic checks on problems (loader and data test us
 src/lib/filters.ts          category / type / difficulty filters
 src/lib/scheduler.ts        spaced repetition + per-category stats from the attempt log
 src/lib/storage.ts          attempt log in localStorage
-src/lib/store.ts            node:sqlite access to data/store.sqlite (explanations insert / select, match tables select)
+src/lib/store.ts            node:sqlite access to data/store.sqlite (explanations + translations insert / select, match tables select)
 src/lib/matches.ts          decision row -> Problem + played move, error thresholds, lossClass, summaries (client-safe)
 src/lib/explain.ts          prompt builder + text cleaning; explain-models.ts picker; explain-audit.ts number/move check
+                            (also English vs Hebrew); translate.ts the Hebrew translation prompt; claude.ts the SDK call
+                            both routes make; rtl.ts Hebrew display (moves and signed numbers kept left to right)
 src/lib/lesson-store.ts     node:sqlite reads of data/lessons/lessons.sqlite (schema in lesson-store-schema.ts), image paths
 src/lib/lessons.ts          lesson view types, grouping, image URLs, choice colours (client-safe)
 src/lib/lesson-progress.ts  lesson answers + runs in localStorage, per-set progress; lesson-player.ts: the player's reducer
@@ -136,6 +141,15 @@ pipeline/bgpipeline/        xgid.py, moves.py (ports of src/lib), gnubg_*.py, fe
   schema lives in `src/lib/store-schema.ts` with its version in table `meta`; Python reads the
   same file with the standard library `sqlite3`. Bump `PROMPT_VERSION` in `src/lib/explain.ts`
   when the prompt changes.
+- **Hebrew translations**: every explanation is shown in English with its Hebrew translation
+  under it. The panel asks `/api/explain/translate` right after a new explanation (the model
+  picked, effort `low`) and offers "Translate to Hebrew" for one stored without a translation;
+  never on load or in batch. Rows go into table `translations` keyed by the explanation's row
+  id, appended like explanations; the loaders attach the newest one of the explanation on show
+  (`explanationHebrew`), so a regenerated text never shows an old translation. The Hebrew is
+  drawn `dir="rtl"` through `src/lib/rtl.ts`, which isolates moves and signed numbers left to
+  right; do not render it as a plain string. Bump `TRANSLATION_PROMPT_VERSION` in
+  `src/lib/translate.ts` when that prompt changes.
 - **Matches**: the user is always Player 1 (the `[Player 1 …]` header, the left column) and
   only Player 1's decisions are analysed. The `.mat` parser follows gnubg's importer rules and
   refuses unknown records (no Galaxy sample with cube actions exists yet). Decision ids are
@@ -214,7 +228,10 @@ pipeline/bgpipeline/        xgid.py, moves.py (ports of src/lib), gnubg_*.py, fe
 - Next 16 allows one `next dev` per folder (a second one exits with "Another next dev server is
   already running"); `.claude/launch.json` has `autoPort`, but when another session holds the
   folder the new server dies at once: navigate the Browser pane to the running one on
-  `localhost:3000` instead (same files, HMR picks up edits). `node:sqlite` bundles fine in route
+  `localhost:3000` instead (same files, HMR picks up edits). If that one does not answer and
+  `.next/dev/logs/next-development.log` ends in `EPIPE: broken pipe`, the session that started
+  it is gone and the server is orphaned (seen 2026-09-24): stop its tree with `taskkill /PID
+  <npm run dev pid> /T /F` and start a fresh one. `node:sqlite` bundles fine in route
   handlers; Node prints one ExperimentalWarning for it. The upload routes spawn `uv.exe` found on
   the dev server's PATH (`BG_UV` overrides) with `cwd` = `pipeline/` (`src/lib/pipeline-process.ts`;
   Node cannot spawn a `uv.cmd` shim without a shell). They set `PYTHONIOENCODING=utf-8`, and the

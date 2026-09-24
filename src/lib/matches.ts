@@ -3,7 +3,15 @@
  * knows (a `Problem` plus "what you played"), and the error thresholds. Pure and client-safe;
  * the store types are imported as types only.
  */
-import { CATEGORIES, POSITION_CLASSES, type Category, type ExplanationMeta, type PositionClass, type Problem } from "@/types/problem";
+import {
+  CATEGORIES,
+  POSITION_CLASSES,
+  type Category,
+  type ExplanationMeta,
+  type ExplanationTranslation,
+  type PositionClass,
+  type Problem,
+} from "@/types/problem";
 import type { DecisionKind, DecisionRow, GameRow, MatchRow } from "./store";
 
 /** XG-style thresholds: a loss of 0.02 is an error, 0.08 a blunder. */
@@ -55,18 +63,34 @@ export interface MatchDecision {
 }
 
 export interface StoredExplanation {
+  /** The store row. */
+  id?: number;
   explanation: string;
   model: string;
   generatedAt: string;
   /** null for explanations written before the effort was recorded. */
   effort?: string | null;
+  /** The newest Hebrew translation of this row, if any. */
+  hebrew?: Pick<ExplanationTranslation, "explanationId" | "text" | "model" | "generatedAt"> | null;
 }
 
 /** What the panel shows under an explanation: the model, the date and, when recorded, the effort. */
-export function explanationMeta(row: Pick<StoredExplanation, "model" | "generatedAt" | "effort">): ExplanationMeta {
+export function explanationMeta(row: Pick<StoredExplanation, "id" | "model" | "generatedAt" | "effort">): ExplanationMeta {
   const meta: ExplanationMeta = { model: row.model, generatedAt: row.generatedAt.slice(0, 10) };
+  if (row.id !== undefined) meta.id = row.id;
   if (row.effort) meta.effort = row.effort;
   return meta;
+}
+
+/** A problem's explanation fields from its stored explanation: the text, its provenance and its Hebrew translation. */
+export function storedExplanationFields(stored: StoredExplanation): Pick<Problem, "explanation" | "explanationMeta" | "explanationHebrew"> {
+  const fields: Pick<Problem, "explanation" | "explanationMeta" | "explanationHebrew"> = {
+    explanation: stored.explanation,
+    explanationMeta: explanationMeta(stored),
+  };
+  const he = stored.hebrew;
+  if (he) fields.explanationHebrew = { explanationId: he.explanationId, text: he.text, model: he.model, generatedAt: he.generatedAt.slice(0, 10) };
+  return fields;
 }
 
 function categories(raw: string[]): Category[] {
@@ -97,12 +121,12 @@ export function decisionProblem(row: DecisionRow, explanations?: Map<string, Sto
     type: row.kind === "checker" ? "checker" : "cube",
     answers: row.answers,
     categories: categories(row.categories),
-    explanation: stored?.explanation ?? "",
+    explanation: "",
     source: "match",
     analysis: { engine: "gnubg", plies: row.plies, positionClass: positionClass(row.positionClass), analysedAt: row.analysedAt },
+    ...(stored ? storedExplanationFields(stored) : {}),
   };
   if (row.features) problem.features = row.features;
-  if (stored) problem.explanationMeta = explanationMeta(stored);
   return problem;
 }
 

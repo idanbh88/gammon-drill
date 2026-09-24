@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ERROR_THRESHOLD, type MatchDecision } from "@/lib/matches";
 import { positionAfter, verdict, type Tone } from "@/lib/play-ui";
 import type { Position } from "@/lib/xgid";
-import type { Problem } from "@/types/problem";
+import type { ExplanationPatch } from "@/types/problem";
 import AnswerReveal from "./AnswerReveal";
 import ExplanationPanel from "./ExplanationPanel";
 
@@ -65,7 +65,7 @@ export default function DecisionFeedback({
   /** The label of the preview on show, if any. */
   previewing?: string | null;
 }) {
-  const [generated, setGenerated] = useState<Pick<Problem, "explanation" | "explanationMeta"> | null>(null);
+  const [generated, setGenerated] = useState<ExplanationPatch | null>(null);
   const problem = { ...decision.problem, ...generated };
   const v = verdict(decision);
   const best = problem.answers[0];
@@ -106,7 +106,7 @@ export default function DecisionFeedback({
         {played && <QuizToggle decisionId={problem.id} initial={decision.inQuiz ?? played.loss >= ERROR_THRESHOLD} />}
       </div>
       {problem.answers.length >= 2 && (
-        <ExplanationPanel key={problem.id} problem={problem} onGenerated={(_id, explanation, explanationMeta) => setGenerated({ explanation, explanationMeta })} />
+        <ExplanationPanel key={problem.id} problem={problem} onGenerated={(_id, patch) => setGenerated((prev) => ({ ...prev, ...patch }))} />
       )}
     </section>
   );

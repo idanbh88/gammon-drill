@@ -11,11 +11,14 @@
  * `problemId` is a quiz problem id or a match decision id (match-<id>-g1-m7-checker, from the
  * store); for a decision the prompt also names the move that was played.
  *
+ * `explanationMeta.id` is the new row; the panel then asks /api/explain/translate for its Hebrew
+ * translation.
+ *
  * The API key comes from ANTHROPIC_API_KEY, which Next.js loads from the repo-root .env into the
  * server process; it never reaches the client.
  */
-import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
+import { askClaude, ClaudeError, hasApiKey, NO_KEY, type ClaudeReply } from "@/lib/claude";
 import { buildPrompt, cleanExplanation, maxTokensFor, promptSha256, PROMPT_VERSION, SYSTEM_PROMPT, type PromptOptions } from "@/lib/explain";
 import { auditExplanation } from "@/lib/explain-audit";
 import { explainModel, isExplainEffort, isExplainModel, suggestedModel } from "@/lib/explain-models";
@@ -26,8 +29,6 @@ import type { Problem } from "@/types/problem";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_KEY = "No API key. Put ANTHROPIC_API_KEY in .env at the repo root (see .env.example) and restart `npm run dev`.";
 
 function bad(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
@@ -55,15 +56,6 @@ export async function GET(req: Request) {
   });
 }
 
-function describeError(e: unknown): string {
-  if (e instanceof Anthropic.AuthenticationError) return "The API key was rejected. Check ANTHROPIC_API_KEY in .env.";
-  if (e instanceof Anthropic.PermissionDeniedError) return `The API key is not allowed to use this model (${e.message}).`;
-  if (e instanceof Anthropic.RateLimitError) return "Rate limited by the API. Try again in a minute.";
-  if (e instanceof Anthropic.APIConnectionError) return `Could not reach the API (${e.message}).`;
-  if (e instanceof Anthropic.APIError) return `API error ${e.status ?? ""}: ${e.message}`;
-  return e instanceof Error ? e.message : String(e);
-}
-
 export async function POST(req: Request) {
   let body: { problemId?: unknown; model?: unknown; effort?: unknown };
   try {
@@ -77,63 +69,39 @@ export async function POST(req: Request) {
   if (typeof model !== "string" || !isExplainModel(model)) return bad(`unknown model "${String(model)}"`);
   const found = await findProblem(problemId);
   if (!found) return bad(`unknown problem "${problemId}"`);
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) return bad(NO_KEY, 500);
+  if (!hasApiKey()) return bad(NO_KEY, 500);
 
   const { problem, opts } = found;
   const prompt = buildPrompt(problem, opts);
-  const spec = explainModel(model);
-  const effort = typeof body.effort === "string" && isExplainEffort(body.effort) ? body.effort : spec.defaultEffort;
-  const client = new Anthropic();
-  let response: Anthropic.Beta.BetaMessage;
-  let requestId: string | null = null;
+  const effort = typeof body.effort === "string" && isExplainEffort(body.effort) ? body.effort : explainModel(model).defaultEffort;
+  let reply: ClaudeReply;
   try {
-    // Streamed so a long think at xhigh / max is not cut off by the SDK's non-streaming time limit.
-    const stream = client.beta.messages.stream({
-      model,
-      max_tokens: maxTokensFor(effort),
-      system: [{ type: "text", text: SYSTEM_PROMPT }],
-      messages: [{ role: "user", content: prompt }],
-      // Server-side retry on a substitute model if a safety classifier declines the request.
-      // The served model is what gets recorded.
-      ...(spec.usesFallbacks ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
-      output_config: { effort },
-    });
-    response = await stream.finalMessage();
-    requestId = stream.request_id ?? null;
+    reply = await askClaude({ model, effort, system: SYSTEM_PROMPT, prompt, maxTokens: maxTokensFor(effort) });
   } catch (e) {
-    return bad(describeError(e), 502);
+    return bad(e instanceof ClaudeError ? e.message : String(e), 502);
   }
-
-  if (response.stop_reason === "refusal") {
-    return bad(`The model declined the request (${response.stop_details?.category ?? "refusal"}).`, 502);
-  }
-  const rawText = response.content
-    .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-  if (response.stop_reason === "max_tokens") return bad("The response was cut off at max_tokens.", 502);
-  const explanation = cleanExplanation(rawText);
+  const explanation = cleanExplanation(reply.rawText);
   if (!explanation) return bad("The model returned no text.", 502);
 
-  const servedByFallback = (response.usage.iterations ?? []).some((it) => it.type === "fallback_message");
   const generatedAt = new Date().toISOString();
   const db = openStore(storePath(DATA_DIR));
+  let id: number;
   try {
-    insertExplanation(db, {
+    id = insertExplanation(db, {
       xgid: problem.xgid,
       problemId: problem.id,
       requestedModel: model,
-      model: response.model,
+      model: reply.model,
       promptVersion: PROMPT_VERSION,
       promptSha256: promptSha256(prompt),
       explanation,
-      rawText,
+      rawText: reply.rawText,
       generatedAt,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-      cacheReadTokens: response.usage.cache_read_input_tokens ?? null,
-      requestId,
-      servedByFallback,
+      inputTokens: reply.inputTokens,
+      outputTokens: reply.outputTokens,
+      cacheReadTokens: reply.cacheReadTokens,
+      requestId: reply.requestId,
+      servedByFallback: reply.servedByFallback,
       effort,
     });
   } finally {
@@ -142,9 +110,9 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     explanation,
-    explanationMeta: { model: response.model, generatedAt: generatedAt.slice(0, 10), effort },
+    explanationMeta: { id, model: reply.model, generatedAt: generatedAt.slice(0, 10), effort },
     audit: auditExplanation(problem, explanation),
-    servedByFallback,
-    usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
+    servedByFallback: reply.servedByFallback,
+    usage: { inputTokens: reply.inputTokens, outputTokens: reply.outputTokens },
   });
 }

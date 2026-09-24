@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { auditExplanation } from "@/lib/explain-audit";
+import { auditExplanation, translationMismatches } from "@/lib/explain-audit";
 import type { Problem } from "@/types/problem";
 
 const ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -39,5 +39,25 @@ describe("auditExplanation", () => {
   it("checks every hop of a chained or doubled move", () => {
     expect(auditExplanation(byId["seed-004"], "bar/21*/18 and bar/21* 24/21")).toEqual([]);
     expect(auditExplanation(byId["seed-004"], "bar/21*/17, 13/8(2) and 8/5(2)")).toEqual(["bar/21*/17", "13/8(2)"]);
+  });
+});
+
+describe("translationMismatches", () => {
+  const english = "Playing 13/8 loses 0.045 and wins 55.1% of games; bar/21* 24/21 hits, and the race is 150 to 167 (−0.120).";
+
+  it("accepts a translation with the same numbers and moves", () => {
+    const hebrew = "לשחק 13/8 מפסיד 0.045 ומנצח ב-55.1% מהמשחקים; bar/21* 24/21 מכה, והמירוץ הוא 150 מול 167 (-0.120).";
+    expect(translationMismatches(english, hebrew)).toEqual([]);
+  });
+
+  it("lists what the translation dropped, then what it added", () => {
+    const hebrew = "לשחק 13/9 מפסיד 0.45 ומנצח ב-55.1% מהמשחקים; bar/21* 24/21 מכה, והמירוץ הוא 150 מול 167 (0.120).";
+    expect(translationMismatches(english, hebrew)).toEqual(["13/8", "0.045", "13/9", "0.45"]);
+  });
+
+  it("compares numbers by value and leaves small integers alone", () => {
+    expect(translationMismatches("about 30% wins, 0.050 behind", "כ-30 אחוז ניצחונות, 0.05 מאחור")).toEqual([]);
+    expect(translationMismatches("make the 5-point with two checkers", "לבנות את הנקודה החמישית עם 2 כלים")).toEqual([]);
+    expect(translationMismatches("an opening 63", "פתיחה של 64")).toEqual(["63", "64"]);
   });
 });

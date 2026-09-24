@@ -9,13 +9,18 @@
  * `bar/21` and `24/21`) and every hop must occur in some answer.
  *
  * Returns the tokens that nothing in the data explains, in order of appearance.
+ *
+ * `translationMismatches` compares a translation with its English original the same way: the
+ * numbers and moves must be the same in both.
  */
 import type { Problem } from "@/types/problem";
 import { actingView } from "./board";
 import { parseXgid } from "./xgid";
 
-const TOKEN =
-  /(?<move>(?:bar|\d{1,2})\/(?:\d{1,2}|off)(?:\*?\/(?:\d{1,2}|off))*\*?(?:\(\d\))?)|(?<pct>\d+(?:\.\d+)?)\s?%|(?<dec>\d*\.\d+)|(?<int>\d+)/gi;
+/** One move in notation (13/7, bar/21*, 6/off, 8/5(2)), hops chained through a hit included. */
+export const MOVE_PATTERN = String.raw`(?:bar|\d{1,2})\/(?:\d{1,2}|off)(?:\*?\/(?:\d{1,2}|off))*\*?(?:\(\d\))?`;
+
+const TOKEN = new RegExp(String.raw`(?<move>${MOVE_PATTERN})|(?<pct>\d+(?:\.\d+)?)\s?%|(?<dec>\d*\.\d+)|(?<int>\d+)`, "gi");
 
 const UNCHECKED_INT_MAX = 25;
 const CUBE_VALUES = new Set([32, 64]);
@@ -109,4 +114,40 @@ export function auditExplanation(problem: Problem, text: string): string[] {
     }
   }
   return flagged;
+}
+
+/**
+ * The numbers and moves of a text as comparable keys, each with the text it was found as.
+ * A number is keyed by its value, so 30% and "30 אחוז" (percent in words) or 0.050 and 0.05
+ * agree; integers up to 25 (points, checkers, dice) are left out as in the audit, since either
+ * language may spell them in words.
+ */
+function comparable(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of text.matchAll(TOKEN)) {
+    const g = m.groups!;
+    if (g.move !== undefined) {
+      if (!out.has(`m:${g.move.toLowerCase()}`)) out.set(`m:${g.move.toLowerCase()}`, g.move);
+      continue;
+    }
+    const raw = g.pct ?? g.dec ?? g.int!;
+    if (g.int !== undefined && Number(raw) <= UNCHECKED_INT_MAX) continue;
+    const key = `n:${Number(raw)}`;
+    if (!out.has(key)) out.set(key, g.pct !== undefined ? m[0].replace(/\s/g, "") : raw);
+  }
+  return out;
+}
+
+/**
+ * Numbers and moves that a translation and its English original do not share: first those of
+ * the English missing from the translation, then those the translation added. Empty when the
+ * two agree.
+ */
+export function translationMismatches(english: string, translation: string): string[] {
+  const en = comparable(english);
+  const tr = comparable(translation);
+  const out: string[] = [];
+  for (const [key, shown] of en) if (!tr.has(key)) out.push(shown);
+  for (const [key, shown] of tr) if (!en.has(key)) out.push(shown);
+  return out;
 }

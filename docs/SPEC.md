@@ -8,9 +8,9 @@ A web app for practising backgammon positions (checker plays and cube decisions)
 spirit of Robertie's *501 Essential Backgammon Problems*, on an open data pipeline: positions
 come in as XGIDs, GNU Backgammon evaluates them, the app quizzes the user and tracks mistakes.
 Problem sets are JSON files and progress lives in the browser's `localStorage`; explanations
-written by Claude and the user's imported matches (Backgammon Galaxy `.mat` exports, replayed
-and analysed by gnubg) live in `data/store.sqlite`, a SQLite file the app and the pipeline
-share. Backgammon Galaxy quiz sets (picture-based multiple choice) can be imported as lessons;
+written by Claude (in English, each with a Hebrew translation shown under it) and the user's
+imported matches (Backgammon Galaxy `.mat` exports, replayed and analysed by gnubg) live in
+`data/store.sqlite`, a SQLite file the app and the pipeline share. Backgammon Galaxy quiz sets (picture-based multiple choice) can be imported as lessons;
 they live, with their pictures, in a separate git-ignored database under `data/lessons/`.
 The user can also play matches against gnubg in the app: gnubg (one long-lived process) plays
 its best move, grades each of the user's decisions as it is made, and every error joins the
@@ -93,7 +93,8 @@ interface Problem {
   answers: Answer[];             // ranked best first, at least two
   categories: Category[];        // at least one, from the taxonomy in § 7
   explanation: string;           // hand-written fallback; generated text is overlaid from the store
-  explanationMeta?: { model: string; generatedAt: string; effort?: string };   // set from the store row
+  explanationMeta?: { id?: number; model: string; generatedAt: string; effort?: string };   // set from the store row (id = explanations.id)
+  explanationHebrew?: { explanationId: number; text: string; model: string; generatedAt: string };   // newest translation of that row (never in JSON)
   source?: string;
   analysis?: { engine: "gnubg" | "manual"; plies?; positionClass?; analysedAt? };
   features?: Record<string, number | boolean | string>;   // classifier features
@@ -107,21 +108,28 @@ checker answer is a legal play, cube answer ids come from the right set.
 
 ### Explanation store
 
-`data/store.sqlite` (schema in `src/lib/store-schema.ts`, `meta.schema_version` = 4) holds every
+`data/store.sqlite` (schema in `src/lib/store-schema.ts`, `meta.schema_version` = 5) holds every
 explanation ever generated, in table `explanations`: xgid, problem id (a quiz problem id or a
 match decision id), requested and served model, prompt version and SHA-256 of the full prompt,
 the cleaned text and the model's raw text, generation time, token counts, request id,
 whether a server-side fallback served it, and the effort level it was asked for (`effort`, since
 schema v4; NULL for older rows). Rows are inserted, never updated or deleted, so
-regenerating keeps the old text. The loader (`src/lib/problems.ts`) overlays the newest row per
-XGID onto `explanation` / `explanationMeta`; the JSON field stays as a hand-written fallback,
-and the match review shows the same newest-per-XGID text. The app opens the file with Node's
-built-in `node:sqlite`; Python uses the standard library and reads `SCHEMA_VERSION` /
-`SCHEMA_SQL` / `ADDED_COLUMNS` out of the TypeScript file (`pipeline/bgpipeline/store.py`), so
-the schema has one home. Every schema version so far is additive: a writable open (app or
-importer) runs the DDL, adds the `ADDED_COLUMNS` a table lacks (`ALTER TABLE ... ADD COLUMN`;
-CREATE TABLE IF NOT EXISTS leaves an older table as it was) and bumps `meta.schema_version`; a
-read-only open accepts an older file (the app then reads a missing column as NULL).
+regenerating keeps the old text. Table `translations` (schema v5) holds the Hebrew
+translations the same way: the explanation row translated (`explanation_id`), `language`
+(`he`), the text and raw text, and the same provenance columns (models, prompt version and
+hash, time, tokens, request id, fallback, effort); appended, never updated or deleted. The
+loader (`src/lib/problems.ts`) overlays the newest row per XGID onto `explanation` /
+`explanationMeta` (with the row id) and the newest Hebrew translation of that same row onto
+`explanationHebrew`, so a regenerated explanation never shows the old text's translation; the
+JSON field stays as a hand-written fallback, and the match review and the play screen show the
+same newest-per-XGID text. The app opens the file with Node's built-in `node:sqlite`; Python
+uses the standard library and reads `SCHEMA_VERSION` / `SCHEMA_SQL` / `ADDED_COLUMNS` out of the
+TypeScript file (`pipeline/bgpipeline/store.py`), so the schema has one home. Every schema
+version so far is additive: a writable open (app or importer) runs the DDL, adds the
+`ADDED_COLUMNS` a table lacks (`ALTER TABLE ... ADD COLUMN`; CREATE TABLE IF NOT EXISTS leaves
+an older table as it was) and bumps `meta.schema_version`; a read-only open accepts an older
+file (the app then reads a missing column as NULL, and a file before v5 as having no
+translations).
 
 ### Match store
 
@@ -299,6 +307,25 @@ the quiz offers the top four in random order.
   for explanations written before it was recorded) and, when the audit
   (`src/lib/explain-audit.ts`) finds a number or move that is not in the problem's data,
   "Not found in the data: …". Errors (no key, refusal, network) show in the panel.
+- **Hebrew translation** (same panel, asked for by the user, who reads Hebrew more easily):
+  every explanation is shown in English with its Hebrew translation under it, right to left.
+  Right after a new explanation arrives the panel asks `POST /api/explain/translate` for its
+  translation, with the model picked in the panel and effort `low` (`TRANSLATION_EFFORT`);
+  "מתרגם לעברית…" shows meanwhile, and the result is inserted into `translations` and shown.
+  An explanation stored without one (every explanation written before 2026-09-24, or one
+  whose translation failed) gets a "Translate to Hebrew" button instead: nothing is translated
+  on page load. The prompt (`src/lib/translate.ts`, `TRANSLATION_PROMPT_VERSION` he-v1) asks for
+  a faithful translation in natural Hebrew that copies moves in notation and every number
+  exactly, calls Blue כחול and White לבן, and adds the English term in parentheses the first
+  time a term is usually said in English. The text is cleaned like an explanation, plus echoed
+  tags, a leading "תרגום:" label and invisible marks (bidi controls, soft hyphens; the display
+  drops them too, for rows stored earlier). The Hebrew paragraph is `dir="rtl"`;
+  `src/lib/rtl.ts` isolates each run of moves ("13/7 8/7", "bar/21* 24/21") and each signed
+  number ("−0.045") in `<bdi dir="ltr">`, because the bidi algorithm would otherwise reorder
+  them ("8/7 13/7", "*21/bar"). Under it: "Hebrew translation by <model> on <date>" and, when
+  its numbers or moves differ from the English (`translationMismatches`), "The Hebrew differs
+  from the English in: …". `GET /api/explain/translate?explanationId=` shows the prompt
+  without calling the API.
 - **My mistakes in the quiz**: the quiz draws from the problem sets and the user's own mistakes
   (§ 5 My mistakes). A mistake is marked "My mistake"; after answering, the reveal tags the move
   played in the game ("in your game"), a line says where it was played and what it cost, and a
@@ -413,14 +440,15 @@ rules; a problem can carry several tags and always gets at least one. The featur
   from Blue's side, ranked answers with equities / losses / probabilities, features;
   `PROMPT_VERSION` v3 asks for 3–5 sentences of about 120 words and, for a match decision,
   adds a paragraph naming the move that was played and its loss), calls the Anthropic
-  TypeScript SDK, streamed (`max_tokens` 16000, 64000 at xhigh and max, where the thinking can
-  run long; no `thinking` parameter; `output_config.effort` always sent, the chosen level or the
-  model's default from `explain-models.ts`; `fallbacks: "default"` with the
-  `server-side-fallback-2026-07-01` beta for Opus 5, Opus 5.5 and Fable 5.1; only text blocks are
-  read, thinking blocks are ignored), checks `stop_reason`, cleans
-  the text, inserts the store row and returns it with the audit. `GET /api/explain?problemId=`
-  shows the prompt without calling the API. The key comes from `.env` at the repo root, loaded
-  by Next.js into the server process only.
+  TypeScript SDK (`src/lib/claude.ts`, shared with the Hebrew translation route, which uses the
+  same request shape at effort `low`), streamed (`max_tokens` 16000, 64000 at xhigh and max,
+  where the thinking can run long; no `thinking` parameter; `output_config.effort` always sent,
+  the chosen level or the model's default from `explain-models.ts`; `fallbacks: "default"` with
+  the `server-side-fallback-2026-07-01` beta for Opus 5, Opus 5.5 and Fable 5.1; only text
+  blocks are read, thinking blocks are ignored), checks `stop_reason`, cleans the text, inserts
+  the store row and returns it (with its row id, which the panel then asks a translation for)
+  and the audit. `GET /api/explain?problemId=` shows the prompt without calling the API. The
+  key comes from `.env` at the repo root, loaded by Next.js into the server process only.
 - **import_forum.py**: Discourse threads through their JSON API (with like counts), other
   pages by regex; outputs a positions file for `analyze.py` and a JSON of candidate replies.
 - **import_match.py**: `.mat` files, folders or globs (expanded by the script, PowerShell does
@@ -591,3 +619,5 @@ also break the quiz loader, which reads every top-level `data/*.json` as a probl
 | 2026-09-24 | Animations are pure frame lists (`board-animation.ts`) drawn by the static Board plus a Web Animations overlay; the Board stays hook-free | testable without a browser, and the quiz, review and `/board` pages keep rendering the same board on the server |
 | 2026-09-24 | The explanation panel offers an effort level beside the model (default: the model's own), sent as `output_config.effort` and recorded in `explanations.effort` (schema v4, added to older files by `ADDED_COLUMNS` on both sides) | asked by the user; effort is the main cost / depth control on the current models, and provenance should say how an explanation was produced |
 | 2026-09-24 | Explanation requests are streamed; `max_tokens` 64000 at xhigh and max | thinking counts toward `max_tokens`, and the SDK refuses non-streamed requests above about 21K tokens |
+| 2026-09-24 | Every explanation is shown in English with a Hebrew translation under it: a second request right after a new explanation (same model as picked, effort `low`), older ones from a "Translate to Hebrew" button; translations are appended to their own table `translations`, keyed by the explanation row (schema v5) | asked by the user, who reads Hebrew more easily; translating the stored English keeps the English prompt, its audit and every earlier text as they were, works for the explanations already stored, and a failed translation never loses the explanation; nothing is generated on page load, as for explanations |
+| 2026-09-24 | The Hebrew is drawn right to left with moves and signed numbers isolated left to right (`rtl.ts`), and checked against the English for numbers and moves | the Unicode bidi algorithm scrambles notation inside Hebrew ("*21/bar"); a translation that changes a number would mislead exactly where the user relies on it |

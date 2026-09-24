@@ -1,18 +1,19 @@
 /**
- * The SQLite store (`data/store.sqlite`): generated explanations, and the matches, games and
- * decisions written by the match importer (pipeline/import_match.py). Server-only
- * (node:sqlite); do not import from client components.
+ * The SQLite store (`data/store.sqlite`): generated explanations and their Hebrew translations,
+ * and the matches, games and decisions written by the match importer
+ * (pipeline/import_match.py). Server-only (node:sqlite); do not import from client components.
  *
- * Explanations are only ever inserted, so nothing generated is lost. Match rows are written
- * by Python; the app only reads them. Connections are short-lived (open, query, close). The
- * loader opens read-only and skips the overlay when the file does not exist yet; the first
- * write creates it, and a writable open upgrades an older file (every version is additive).
+ * Explanations and translations are only ever inserted, so nothing generated is lost. Match
+ * rows are written by Python; the app only reads them. Connections are short-lived (open,
+ * query, close). The loader opens read-only and skips the overlay when the file does not exist
+ * yet; the first write creates it, and a writable open upgrades an older file (every version is
+ * additive).
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Answer, Problem } from "@/types/problem";
-import { explanationMeta } from "./matches";
+import { storedExplanationFields, type StoredExplanation } from "./matches";
 import { mistakeProblems, type MistakeRow } from "./mistakes";
 import { ratePlayer, type PlayerRating, type RatedDecision } from "./pr";
 import { ADDED_COLUMNS, SCHEMA_SQL, SCHEMA_VERSION } from "./store-schema";
@@ -55,6 +56,37 @@ export interface ExplanationRow {
 }
 
 export type NewExplanation = Omit<ExplanationRow, "id">;
+
+/** The language code of the translations the app writes. */
+export const HEBREW = "he";
+
+/** One translation of an explanation (schema v5); the same provenance columns as an explanation. */
+export interface TranslationRow {
+  id: number;
+  /** The explanations row translated. */
+  explanationId: number;
+  /** ISO 639-1 code: "he". */
+  language: string;
+  requestedModel: string;
+  model: string;
+  promptVersion: string;
+  promptSha256: string;
+  text: string;
+  rawText: string;
+  /** ISO 8601 date-time. */
+  generatedAt: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  requestId: string | null;
+  servedByFallback: boolean;
+  effort: string | null;
+}
+
+export type NewTranslation = Omit<TranslationRow, "id">;
+
+/** The newest explanation of a position with the newest Hebrew translation of that same row. */
+export type LatestExplanation = ExplanationRow & { hebrew: TranslationRow | null };
 
 export interface MatchRow {
   id: number;
@@ -213,16 +245,13 @@ function explanationColumns(db: DatabaseSync): string {
   return BASE_COLUMNS + (hasColumn(db, "explanations", "effort") ? ", effort" : ", NULL AS effort");
 }
 
-function fromRow(r: Record<string, unknown>): ExplanationRow {
+/** The provenance columns explanations and translations share. */
+function provenanceFromRow(r: Record<string, unknown>) {
   return {
-    id: Number(r.id),
-    xgid: String(r.xgid),
-    problemId: String(r.problem_id),
     requestedModel: String(r.requested_model),
     model: String(r.model),
     promptVersion: String(r.prompt_version),
     promptSha256: String(r.prompt_sha256),
-    explanation: String(r.explanation),
     rawText: String(r.raw_text),
     generatedAt: String(r.generated_at),
     inputTokens: r.input_tokens == null ? null : Number(r.input_tokens),
@@ -231,6 +260,16 @@ function fromRow(r: Record<string, unknown>): ExplanationRow {
     requestId: r.request_id == null ? null : String(r.request_id),
     servedByFallback: Number(r.served_by_fallback) !== 0,
     effort: r.effort == null ? null : String(r.effort),
+  };
+}
+
+function fromRow(r: Record<string, unknown>): ExplanationRow {
+  return {
+    id: Number(r.id),
+    xgid: String(r.xgid),
+    problemId: String(r.problem_id),
+    explanation: String(r.explanation),
+    ...provenanceFromRow(r),
   };
 }
 
@@ -262,12 +301,24 @@ export function insertExplanation(db: DatabaseSync, e: NewExplanation): number {
   return Number(result.lastInsertRowid);
 }
 
-/** The newest explanation per XGID. */
-export function latestExplanations(db: DatabaseSync): Map<string, ExplanationRow> {
+/** The newest explanation per XGID, each with the newest Hebrew translation of that row. */
+export function latestExplanations(db: DatabaseSync): Map<string, LatestExplanation> {
   const rows = db
     .prepare(`SELECT ${explanationColumns(db)} FROM explanations e WHERE e.id = (SELECT MAX(id) FROM explanations WHERE xgid = e.xgid)`)
     .all() as Record<string, unknown>[];
-  return new Map(rows.map((r) => [String(r.xgid), fromRow(r)]));
+  const hebrew = latestTranslations(db, HEBREW);
+  return new Map(
+    rows.map((r) => {
+      const row = fromRow(r);
+      return [row.xgid, { ...row, hebrew: hebrew.get(row.id) ?? null }];
+    }),
+  );
+}
+
+/** One explanation by its row id. */
+export function getExplanation(db: DatabaseSync, id: number): ExplanationRow | null {
+  const row = db.prepare(`SELECT ${explanationColumns(db)} FROM explanations WHERE id = ?`).get(id) as Record<string, unknown> | undefined;
+  return row ? fromRow(row) : null;
 }
 
 /** Every stored explanation for one position, newest first. */
@@ -282,7 +333,7 @@ export function countExplanations(db: DatabaseSync): number {
 }
 
 /** The latest stored explanation per XGID, or an empty map when there is no store file. */
-export function readLatestExplanations(dir: string): Map<string, ExplanationRow> {
+export function readLatestExplanations(dir: string): Map<string, LatestExplanation> {
   const file = storePath(dir);
   if (!existsSync(file)) return new Map();
   const db = openStore(file, { readOnly: true });
@@ -293,13 +344,84 @@ export function readLatestExplanations(dir: string): Map<string, ExplanationRow>
   }
 }
 
-/** Overlay stored explanations onto problems: a store row wins over the JSON field. */
-export function applyStore(problems: Problem[], latest: Map<string, ExplanationRow>): Problem[] {
+/** One explanation by its row id, or null (also when there is no store file). */
+export function readExplanation(dir: string, id: number): ExplanationRow | null {
+  return withReadOnly(dir, null, (db) => getExplanation(db, id));
+}
+
+/** Overlay stored explanations and their Hebrew translations onto problems: a store row wins over the JSON field. */
+export function applyStore(problems: Problem[], latest: Map<string, StoredExplanation>): Problem[] {
   return problems.map((p) => {
     const row = latest.get(p.xgid);
-    if (!row) return p;
-    return { ...p, explanation: row.explanation, explanationMeta: explanationMeta(row) };
+    return row ? { ...p, ...storedExplanationFields(row) } : p;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Translations (schema v5): the Hebrew text under an explanation, appended like explanations
+
+/** The translations table exists from schema version 5 on. */
+export function hasTranslations(db: DatabaseSync): boolean {
+  return schemaVersion(db) >= 5;
+}
+
+const TRANSLATION_COLUMNS =
+  "id, explanation_id, language, requested_model, model, prompt_version, prompt_sha256, text, raw_text, generated_at, " +
+  "input_tokens, output_tokens, cache_read_tokens, request_id, served_by_fallback, effort";
+
+function translationFromRow(r: Record<string, unknown>): TranslationRow {
+  return {
+    id: Number(r.id),
+    explanationId: Number(r.explanation_id),
+    language: String(r.language),
+    text: String(r.text),
+    ...provenanceFromRow(r),
+  };
+}
+
+/** Append one translation; returns its row id. */
+export function insertTranslation(db: DatabaseSync, t: NewTranslation): number {
+  const result = db
+    .prepare(
+      "INSERT INTO translations (explanation_id, language, requested_model, model, prompt_version, prompt_sha256, text, raw_text, " +
+        "generated_at, input_tokens, output_tokens, cache_read_tokens, request_id, served_by_fallback, effort) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .run(
+      t.explanationId,
+      t.language,
+      t.requestedModel,
+      t.model,
+      t.promptVersion,
+      t.promptSha256,
+      t.text,
+      t.rawText,
+      t.generatedAt,
+      t.inputTokens,
+      t.outputTokens,
+      t.cacheReadTokens,
+      t.requestId,
+      t.servedByFallback ? 1 : 0,
+      t.effort,
+    );
+  return Number(result.lastInsertRowid);
+}
+
+/** The newest translation into `language` per explanation row id; empty for a file older than v5. */
+export function latestTranslations(db: DatabaseSync, language: string): Map<number, TranslationRow> {
+  if (!hasTranslations(db)) return new Map();
+  const rows = db
+    .prepare(
+      `SELECT ${TRANSLATION_COLUMNS} FROM translations t WHERE t.language = ? ` +
+        "AND t.id = (SELECT MAX(id) FROM translations WHERE explanation_id = t.explanation_id AND language = t.language)",
+    )
+    .all(language) as Record<string, unknown>[];
+  return new Map(
+    rows.map((r) => {
+      const row = translationFromRow(r);
+      return [row.explanationId, row];
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------

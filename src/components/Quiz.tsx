@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Answer, Problem } from "@/types/problem";
+import type { Answer, ExplanationPatch, Problem } from "@/types/problem";
 import { questionText } from "@/lib/board";
 import { applyFilters, difficultyBand, DEFAULT_FILTERS, loadFilters, saveFilters, type Filters } from "@/lib/filters";
 import { difficulty, offeredAnswers } from "@/lib/problem-utils";
@@ -46,8 +46,8 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
   const [attempts, setAttempts] = useState<Attempt[]>(() => loadAttempts());
   const [current, setCurrent] = useState<Current | null>(() => pick(applyFilters(problems, loadFilters()), loadAttempts(), null));
   const [count, setCount] = useState(1);
-  /** Explanations generated in this session, keyed by problem id (the store has them for next time). */
-  const [generated, setGenerated] = useState<Record<string, Pick<Problem, "explanation" | "explanationMeta">>>({});
+  /** Explanations and translations generated in this session, keyed by problem id (the store has them for next time). */
+  const [generated, setGenerated] = useState<Record<string, ExplanationPatch>>({});
 
   const pool = useMemo(() => applyFilters(problems, filters), [problems, filters]);
   const due = useMemo(() => dueCount(pool, cardStates(pool, attempts)), [pool, attempts]);
@@ -218,7 +218,7 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
               <ExplanationPanel
                 key={problem.id}
                 problem={problem}
-                onGenerated={(id, explanation, explanationMeta) => setGenerated((g) => ({ ...g, [id]: { explanation, explanationMeta } }))}
+                onGenerated={(id, patch) => setGenerated((g) => ({ ...g, [id]: { ...g[id], ...patch } }))}
               />
               <button
                 type="button"

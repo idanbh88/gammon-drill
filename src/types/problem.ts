@@ -91,6 +91,8 @@ export interface Problem {
   features?: Record<string, number | boolean | string>;
   /** Provenance of a generated explanation (Phase 3, pipeline/explain.py). */
   explanationMeta?: ExplanationMeta;
+  /** The Hebrew translation of the generated explanation, from the store; never in data/*.json. */
+  explanationHebrew?: ExplanationTranslation;
   /** Set on the user's own decisions in the quiz ("My mistakes"); never in data/*.json. */
   origin?: ProblemOrigin;
 }
@@ -109,12 +111,28 @@ export interface ProblemOrigin {
 }
 
 export interface ExplanationMeta {
+  /** The store row (explanations.id), which a translation is asked for; absent for hand-written text. */
+  id?: number;
   model: string;
   /** output_config.effort the explanation was generated with (not recorded before 2026-09-24). */
   effort?: string;
   /** ISO date */
   generatedAt: string;
 }
+
+/** A translation of a generated explanation (table translations). */
+export interface ExplanationTranslation {
+  /** The explanations row it translates: it belongs with that text only. */
+  explanationId: number;
+  text: string;
+  model: string;
+  /** ISO date */
+  generatedAt: string;
+}
+
+/** What the explanation panel hands its parent: a new explanation (with `explanationHebrew`
+ * cleared, the old translation belongs to the old text) or a translation of the one on show. */
+export type ExplanationPatch = Partial<Pick<Problem, "explanation" | "explanationMeta" | "explanationHebrew">>;
 
 export interface ProblemSet {
   name: string;

@@ -85,7 +85,23 @@ describe("decisionProblem", () => {
     expect(cube.features).toBeUndefined();
     expect(cube.explanation).toBe("Text.");
     expect(cube.explanationMeta).toEqual({ model: "claude-opus-5", generatedAt: "2026-09-04" });
+    expect(cube.explanationHebrew).toBeUndefined();
     expect(decisionProblem(row({ kind: "take", played: "pass" })).type).toBe("cube");
+  });
+
+  it("carries the stored row id and its Hebrew translation", () => {
+    const stored = {
+      id: 12,
+      explanation: "Text.",
+      model: "claude-opus-5",
+      generatedAt: "2026-09-24T10:00:00.000Z",
+      effort: "high",
+      hebrew: { explanationId: 12, text: "טקסט.", model: "claude-opus-5", generatedAt: "2026-09-24T10:01:00.000Z" },
+    };
+    const p = decisionProblem(row(), new Map([[XGID, stored]]));
+    expect(p.explanationMeta).toEqual({ id: 12, model: "claude-opus-5", generatedAt: "2026-09-24", effort: "high" });
+    expect(p.explanationHebrew).toEqual({ explanationId: 12, text: "טקסט.", model: "claude-opus-5", generatedAt: "2026-09-24" });
+    expect(decisionProblem(row(), new Map([[XGID, { ...stored, hebrew: null }]])).explanationHebrew).toBeUndefined();
   });
 });
 

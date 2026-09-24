@@ -3,6 +3,14 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildPrompt, cleanExplanation, describePosition, maxTokensFor, promptSha256, PROMPT_VERSION, SYSTEM_PROMPT } from "@/lib/explain";
 import { DEFAULT_MODEL, explainModel, HARD_MODEL, isExplainEffort, isExplainModel, isSlow, suggestedModel } from "@/lib/explain-models";
+import {
+  buildTranslationPrompt,
+  cleanTranslation,
+  TRANSLATION_EFFORT,
+  TRANSLATION_PROMPT_VERSION,
+  TRANSLATION_SYSTEM_PROMPT,
+  translationSha256,
+} from "@/lib/translate";
 import { parseXgid } from "@/lib/xgid";
 import type { Problem } from "@/types/problem";
 
@@ -78,6 +86,38 @@ describe("cleanExplanation", () => {
   it("strips markdown, fences and a leading label", () => {
     const raw = "**Explanation:**\n\n- 8/5 6/5 makes the **5-point**.\n\n1. The alternatives split.\n```\nx\n```\n";
     expect(cleanExplanation(raw)).toBe("8/5 6/5 makes the 5-point. The alternatives split.");
+  });
+});
+
+describe("Hebrew translation prompt", () => {
+  const english = "8/5 6/5 makes the 5-point; 24/23 13/10 loses 0.231.";
+
+  it("hands over the English text alone and asks for Hebrew only", () => {
+    const prompt = buildTranslationPrompt(english);
+    expect(prompt).toContain(`<explanation>\n${english}\n</explanation>`);
+    expect(prompt.endsWith("Reply with the Hebrew text only.")).toBe(true);
+    expect(TRANSLATION_SYSTEM_PROMPT).toContain("into Hebrew");
+    expect(TRANSLATION_SYSTEM_PROMPT).toContain("Copy every move in notation exactly");
+    expect(TRANSLATION_SYSTEM_PROMPT).toContain("Blue is כחול and White is לבן");
+    expect(TRANSLATION_PROMPT_VERSION).toBe("he-v1");
+    expect(TRANSLATION_EFFORT).toBe("low");
+  });
+
+  it("hashes the version, the system prompt and the prompt", () => {
+    const a = translationSha256(buildTranslationPrompt(english));
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+    expect(translationSha256(buildTranslationPrompt(english))).toBe(a);
+    expect(translationSha256(buildTranslationPrompt("Other text."))).not.toBe(a);
+  });
+
+  it("keeps plain prose: no echoed tags, labels or markdown", () => {
+    expect(cleanTranslation("<translation>\nכחול משחק 8/5 6/5.\n</translation>")).toBe("כחול משחק 8/5 6/5.");
+    expect(cleanTranslation("תרגום: **כחול** משחק 8/5 6/5.\n\nהמהלך 24/23 13/10 מפסיד 0.231.")).toBe("כחול משחק 8/5 6/5. המהלך 24/23 13/10 מפסיד 0.231.");
+    expect(cleanTranslation("Translation: כחול משחק.")).toBe("כחול משחק.");
+    const lrm = String.fromCharCode(0x200e);
+    const isolate = (s: string) => String.fromCharCode(0x2066) + s + String.fromCharCode(0x2069);
+    expect(cleanTranslation(`המהלך 23/18 9/8 (${lrm}-0.068) ו-${isolate("13/7 8/7")}`)).toBe("המהלך 23/18 9/8 (-0.068) ו-13/7 8/7");
+    expect(cleanTranslation(`מפסי${String.fromCharCode(0xad)}ד 0.102`)).toBe("מפסיד 0.102");
   });
 });
 

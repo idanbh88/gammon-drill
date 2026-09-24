@@ -29,7 +29,7 @@ XGID = "-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10"
 def test_schema_comes_from_the_typescript_file():
     version, sql = schema_from_ts()
     assert version >= 2
-    for table in ("meta", "explanations", "matches", "games", "decisions"):
+    for table in ("meta", "explanations", "translations", "matches", "games", "decisions"):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in sql
 
 
@@ -162,6 +162,7 @@ def test_upgrades_a_version_1_file(tmp_path):
         assert schema_version(conn) == version
         assert conn.execute("SELECT COUNT(*) FROM explanations").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM matches").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM translations").fetchone()[0] == 0
         # ADDED_COLUMNS: the explanations table of an older file gains the effort column.
         cols = [row[1] for row in conn.execute("PRAGMA table_info(explanations)")]
         assert "effort" in cols

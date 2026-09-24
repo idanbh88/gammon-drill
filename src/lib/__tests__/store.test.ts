@@ -7,16 +7,21 @@ import {
   applyStore,
   countExplanations,
   explanationHistory,
+  getExplanation,
   hasColumn,
   getDecision,
+  HEBREW,
   insertExplanation,
+  insertTranslation,
   latestExplanations,
+  latestTranslations,
   listDecisions,
   listGames,
   listMatches,
   matchSummaries,
   openStore,
   readDecision,
+  readExplanation,
   readLatestExplanations,
   readMatch,
   readMatches,
@@ -24,6 +29,7 @@ import {
   StoreError,
   storePath,
   type NewExplanation,
+  type NewTranslation,
 } from "@/lib/store";
 import { SCHEMA_VERSION } from "@/lib/store-schema";
 import type { Problem } from "@/types/problem";
@@ -48,6 +54,27 @@ function row(over: Partial<NewExplanation> = {}): NewExplanation {
     requestId: "req_1",
     servedByFallback: false,
     effort: null,
+    ...over,
+  };
+}
+
+function translation(explanationId: number, over: Partial<NewTranslation> = {}): NewTranslation {
+  return {
+    explanationId,
+    language: HEBREW,
+    requestedModel: "claude-opus-5",
+    model: "claude-opus-5",
+    promptVersion: "he-v1",
+    promptSha256: "def",
+    text: "תבנה את נקודה 5.",
+    rawText: "תבנה את נקודה 5.",
+    generatedAt: "2026-09-24T12:00:00.000Z",
+    inputTokens: 200,
+    outputTokens: 80,
+    cacheReadTokens: 0,
+    requestId: "req_2",
+    servedByFallback: false,
+    effort: "low",
     ...over,
   };
 }
@@ -119,7 +146,7 @@ describe("store", () => {
     const db = openStore(file);
     expect(schemaVersion(db)).toBe(SCHEMA_VERSION);
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[]).map((r) => r.name);
-    expect(tables).toEqual(["decisions", "explanations", "games", "matches", "meta", "play_state", "quiz_picks"]);
+    expect(tables).toEqual(["decisions", "explanations", "games", "matches", "meta", "play_state", "quiz_picks", "translations"]);
     expect(countExplanations(db)).toBe(0);
     const first = insertExplanation(db, row());
     const second = insertExplanation(db, row({ explanation: "Newer text.", model: "claude-fable-5-1", servedByFallback: true, effort: "xhigh" }));
@@ -130,12 +157,15 @@ describe("store", () => {
     expect(latest.get(XGID)?.explanation).toBe("Newer text.");
     expect(latest.get(XGID)?.servedByFallback).toBe(true);
     expect(latest.get(XGID)?.effort).toBe("xhigh");
-    expect(applyStore([problem("p", XGID)], latest)[0].explanationMeta).toEqual({ model: "claude-fable-5-1", generatedAt: "2026-09-03", effort: "xhigh" });
+    expect(latest.get(XGID)?.hebrew).toBeNull();
+    expect(applyStore([problem("p", XGID)], latest)[0].explanationMeta).toEqual({ id: second, model: "claude-fable-5-1", generatedAt: "2026-09-03", effort: "xhigh" });
 
     const history = explanationHistory(db, XGID);
     expect(history.map((h) => h.explanation)).toEqual(["Newer text.", "Make the 5-point."]);
     expect(history[1]).toMatchObject({ requestId: "req_1", inputTokens: 10, servedByFallback: false, effort: null });
-    expect(applyStore([problem("p", XGID)], new Map([[XGID, history[1]]]))[0].explanationMeta).toEqual({ model: "claude-opus-5", generatedAt: "2026-09-03" });
+    expect(applyStore([problem("p", XGID)], new Map([[XGID, history[1]]]))[0].explanationMeta).toEqual({ id: first, model: "claude-opus-5", generatedAt: "2026-09-03" });
+    expect(getExplanation(db, first)?.explanation).toBe("Make the 5-point.");
+    expect(getExplanation(db, 99)).toBeNull();
     db.close();
 
     // Reopening read-only sees the same rows and the same schema version.
@@ -154,6 +184,8 @@ describe("store", () => {
     expect(latestExplanations(ro).get(XGID)?.explanation).toBe("Old text.");
     expect(hasColumn(ro, "explanations", "effort")).toBe(false);
     expect(latestExplanations(ro).get(XGID)?.effort).toBeNull(); // read as NULL, no error
+    expect(latestExplanations(ro).get(XGID)?.hebrew).toBeNull(); // no translations table yet
+    expect(latestTranslations(ro, HEBREW).size).toBe(0);
     expect(listMatches(ro)).toEqual([]);
     expect(getDecision(ro, "anything")).toBeNull();
     expect(matchSummaries(ro, THRESHOLDS).size).toBe(0);
@@ -165,8 +197,10 @@ describe("store", () => {
     expect(schemaVersion(db)).toBe(SCHEMA_VERSION);
     expect(countExplanations(db)).toBe(1);
     expect(hasColumn(db, "explanations", "effort")).toBe(true); // ADDED_COLUMNS
-    insertExplanation(db, row({ explanation: "New text.", effort: "low" }));
+    const newer = insertExplanation(db, row({ explanation: "New text.", effort: "low" }));
     expect(explanationHistory(db, XGID).map((h) => h.effort)).toEqual(["low", null]);
+    insertTranslation(db, translation(newer)); // the translations table was created too
+    expect(latestExplanations(db).get(XGID)?.hebrew?.text).toBe("תבנה את נקודה 5.");
     insertMatchFixture(db);
     expect(listMatches(db)).toHaveLength(1);
     db.close();
@@ -199,10 +233,42 @@ describe("store", () => {
     const problems = [problem("a", XGID, "hand-written"), problem("b", "other-xgid", "kept")];
     const out = applyStore(problems, readLatestExplanations(dir));
     expect(out[0].explanation).toBe("New.");
-    expect(out[0].explanationMeta).toEqual({ model: "claude-fable-5-1", generatedAt: "2026-09-04" });
+    expect(out[0].explanationMeta).toEqual({ id: 2, model: "claude-fable-5-1", generatedAt: "2026-09-04" });
+    expect(out[0].explanationHebrew).toBeUndefined();
     expect(out[1].explanation).toBe("kept");
     expect(out[1].explanationMeta).toBeUndefined();
     expect(problems[0].explanation).toBe("hand-written"); // input not mutated
+  });
+
+  it("keeps translations per explanation and shows the newest of the explanation on show", () => {
+    expect(readExplanation(dir, 1)).toBeNull(); // no store file yet
+    const db = openStore(storePath(dir));
+    const old = insertExplanation(db, row({ explanation: "Old." }));
+    insertTranslation(db, translation(old, { text: "ישן." }));
+    let latest = latestExplanations(db);
+    expect(latest.get(XGID)?.hebrew?.text).toBe("ישן.");
+
+    // A regenerated explanation does not inherit the old text's translation.
+    const current = insertExplanation(db, row({ explanation: "New." }));
+    latest = latestExplanations(db);
+    expect(latest.get(XGID)?.id).toBe(current);
+    expect(latest.get(XGID)?.hebrew).toBeNull();
+
+    // Translations are appended; the newest per explanation wins, other languages are ignored.
+    const first = insertTranslation(db, translation(current, { text: "חדש." }));
+    const second = insertTranslation(db, translation(current, { text: "חדש יותר.", model: "claude-opus-5-5", generatedAt: "2026-09-25T08:00:00.000Z" }));
+    insertTranslation(db, translation(current, { language: "fr", text: "Nouveau." }));
+    expect(second).toBeGreaterThan(first);
+    const he = latestTranslations(db, HEBREW);
+    expect([...he.keys()].sort((a, b) => a - b)).toEqual([old, current]);
+    expect(he.get(current)).toMatchObject({ id: second, explanationId: current, language: "he", model: "claude-opus-5-5", effort: "low", requestId: "req_2", servedByFallback: false });
+    db.close();
+
+    const out = applyStore([problem("a", XGID)], readLatestExplanations(dir))[0];
+    expect(out.explanationMeta?.id).toBe(current);
+    expect(out.explanationHebrew).toEqual({ explanationId: current, text: "חדש יותר.", model: "claude-opus-5-5", generatedAt: "2026-09-25" });
+    expect(readExplanation(dir, old)?.explanation).toBe("Old.");
+    expect(readExplanation(dir, 99)).toBeNull();
   });
 
   it("reads matches, games and decisions written by the importer", () => {

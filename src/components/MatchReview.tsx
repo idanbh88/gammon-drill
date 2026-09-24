@@ -7,7 +7,7 @@ import { formatLoss, formatPlayedAt, groupByGame, matchResult, summarize, type M
 import type { PlayerRating } from "@/lib/pr";
 import type { GameRow, MatchRow } from "@/lib/store";
 import { parseXgid } from "@/lib/xgid";
-import type { Problem } from "@/types/problem";
+import type { ExplanationPatch } from "@/types/problem";
 import AnswerReveal from "./AnswerReveal";
 import Board from "./Board";
 import { QuizToggle } from "./DecisionFeedback";
@@ -81,8 +81,8 @@ export default function MatchReview({
 }) {
   const [showAll, setShowAll] = useState(false);
   const [side, setSide] = useState<"you" | "them">("you");
-  /** Explanations generated in this session, keyed by decision id (the store has them for next time). */
-  const [generated, setGenerated] = useState<Record<string, Pick<Problem, "explanation" | "explanationMeta">>>({});
+  /** Explanations and translations generated in this session, keyed by decision id (the store has them for next time). */
+  const [generated, setGenerated] = useState<Record<string, ExplanationPatch>>({});
 
   const user = match.analysedPlayer;
   const mine = useMemo(() => decisions.filter((d) => d.player === user), [decisions, user]);
@@ -240,7 +240,7 @@ export default function MatchReview({
                       <ExplanationPanel
                         key={problem.id}
                         problem={problem}
-                        onGenerated={(id, explanation, explanationMeta) => setGenerated((prev) => ({ ...prev, [id]: { explanation, explanationMeta } }))}
+                        onGenerated={(id, patch) => setGenerated((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))}
                       />
                     )}
                   </div>

@@ -1,0 +1,100 @@
+{
+  "id": "5a5a5a5a5a5a5a5a5a5a5a5a",
+  "name": "Synthetic lesson: every shape of a Galaxy quiz export",
+  "type": "mcq",
+  "problemsCount": 6,
+  "createdBy": "Test Author",
+  "level": { "_id": "000000000000000000000001", "label": "Cadet", "color": "#FFF3C7" },
+  "userSession": { "finishedAt": "2026-09-11T10:20:52.320Z", "completedCount": 6, "correctCount": 1 },
+  "chartConfig": [],
+  "status": "COMPLETED",
+  "freeUserLimit": 2,
+  "problems": [
+    {
+      "analysis": "Invented analysis for a checker play.",
+      "id": "b00000000000000000000001",
+      "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/1.png",
+      "choices": [
+        { "id": "c00000000000000000000101", "answer": "13/10", "description": "(-0.062)", "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/1_2_13-10.png" },
+        { "id": "c00000000000000000000102", "answer": "Bar/20 6/3*", "description": "(-0.116)", "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/1_3_Bar-20_6-3x.png" },
+        { "id": "c00000000000000000000103", "answer": "7/5 6/5", "description": "+0.458", "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/1_1_7-5_6-5.png" },
+        { "id": "c00000000000000000000104", "answer": "7/2 6/1 5/Off(2)", "description": "(-0.167)", "imageURL": null }
+      ],
+      "isAttempted": true,
+      "isCorrect": false,
+      "selectedAnswerId": "c00000000000000000000101",
+      "correctAnswerId": "c00000000000000000000103"
+    },
+    {
+      "analysis": null,
+      "id": "b00000000000000000000002",
+      "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/Position%202.png",
+      "choices": [
+        { "id": "c00000000000000000000201", "answer": "Clear No double", "description": "Wrong", "imageURL": "" },
+        { "id": "c00000000000000000000202", "answer": "Borderline Double", "description": "No double +0.784", "imageURL": null },
+        { "id": "c00000000000000000000203", "answer": "Redouble/Pass", "description": "(+0.392)", "imageURL": null },
+        { "id": "c00000000000000000000204", "answer": "Too good/Pass", "description": "(", "imageURL": null }
+      ],
+      "isAttempted": true,
+      "isCorrect": true,
+      "selectedAnswerId": "c00000000000000000000202",
+      "correctAnswerId": "c00000000000000000000202"
+    },
+    {
+      "analysis": "  Invented analysis with spaces around it.  ",
+      "id": "b00000000000000000000003",
+      "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/03_no_analysis_png.png",
+      "choices": [
+        { "id": "c00000000000000000000301", "answer": "No Double / Take", "description": "-0.049", "imageURL": "" },
+        { "id": "c00000000000000000000302", "answer": "Double / Take", "description": "0.000", "imageURL": "" },
+        { "id": "c00000000000000000000303", "answer": "Double / Pass", "description": "-0.094", "imageURL": "" },
+        { "id": "c00000000000000000000304", "answer": "Too good to double / Pass", "description": "-0.143", "imageURL": "" }
+      ],
+      "isAttempted": true,
+      "isCorrect": false,
+      "selectedAnswerId": "c00000000000000000000301",
+      "correctAnswerId": "c00000000000000000000302"
+    },
+    {
+      "analysis": "",
+      "id": "b00000000000000000000004",
+      "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/4.png",
+      "choices": [
+        { "id": "c00000000000000000000401", "answer": "Bar/24 13/8", "description": "-0.438", "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/4_1_Bar-24_13-8.png" },
+        { "id": "c00000000000000000000402", "answer": "Bar/24 6/1", "description": "(-0.097)", "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/4_2_Bar-24_6-1.png" }
+      ],
+      "isAttempted": true,
+      "isCorrect": false,
+      "selectedAnswerId": "c00000000000000000000402",
+      "correctAnswerId": "c00000000000000000000401"
+    },
+    {
+      "analysis": "Invented analysis: a wrong play that loses nothing.",
+      "id": "b00000000000000000000005",
+      "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/5.png",
+      "choices": [
+        { "id": "c00000000000000000000501", "answer": "8/3 6/2", "description": "(-0.000)", "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/5_2_8-3_6-2.png" },
+        { "id": "c00000000000000000000502", "answer": "24/18 13/11", "description": "+0.120", "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/5_1_24-18_13-11.png" },
+        { "id": "c00000000000000000000503", "answer": "13/5", "description": "-0.310", "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/5_3_13-5.png" }
+      ],
+      "isAttempted": true,
+      "isCorrect": true,
+      "selectedAnswerId": "c00000000000000000000502",
+      "correctAnswerId": "c00000000000000000000502"
+    },
+    {
+      "analysis": null,
+      "id": "b00000000000000000000006",
+      "imageURL": "https://cdn-quizzes.backgammongalaxy.com/5a5a5a5a5a5a5a5a5a5a5a5a/6%20rnd1%20A%20v%20B.png",
+      "choices": [
+        { "id": "c00000000000000000000601", "answer": "16/13* 7/1", "description": "(-0.170)", "imageURL": null },
+        { "id": "c00000000000000000000602", "answer": "10/4 7/4", "description": "+0.935", "imageURL": null },
+        { "id": "c00000000000000000000603", "answer": "24/18*/14", "description": "(-0.285)", "imageURL": "" }
+      ],
+      "isAttempted": true,
+      "isCorrect": false,
+      "selectedAnswerId": "c00000000000000000000601",
+      "correctAnswerId": "c00000000000000000000602"
+    }
+  ]
+}

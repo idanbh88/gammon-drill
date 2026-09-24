@@ -91,10 +91,27 @@ export interface Problem {
   features?: Record<string, number | boolean | string>;
   /** Provenance of a generated explanation (Phase 3, pipeline/explain.py). */
   explanationMeta?: ExplanationMeta;
+  /** Set on the user's own decisions in the quiz ("My mistakes"); never in data/*.json. */
+  origin?: ProblemOrigin;
+}
+
+/** Where one of the user's own decisions came from, and what they played. */
+export interface ProblemOrigin {
+  /** "gnubg" for a match played in the app, else the site the match was imported from. */
+  site: string;
+  matchId: number;
+  opponent: string;
+  /** ISO date-time when known. */
+  playedAt: string | null;
+  /** The answer id the user chose in the game. */
+  played: string;
+  loss: number;
 }
 
 export interface ExplanationMeta {
   model: string;
+  /** output_config.effort the explanation was generated with (not recorded before 2026-09-24). */
+  effort?: string;
   /** ISO date */
   generatedAt: string;
 }
@@ -141,7 +158,7 @@ export const ProblemSchema: z.ZodType<Problem> = z.object({
   source: z.string().optional(),
   analysis: AnalysisSchema.optional(),
   features: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).optional(),
-  explanationMeta: z.object({ model: z.string().min(1), generatedAt: z.string().min(1) }).optional(),
+  explanationMeta: z.object({ model: z.string().min(1), generatedAt: z.string().min(1), effort: z.string().optional() }).optional(),
 });
 
 export const ProblemSetSchema: z.ZodType<ProblemSet> = z.object({

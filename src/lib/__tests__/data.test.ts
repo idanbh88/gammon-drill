@@ -31,6 +31,16 @@ describe("data/*.json", () => {
       expect(onBoard, p.id).toEqual(p.id === "seed-005" ? [10, 10] : [15, 15]);
     }
   });
+
+  it("overlays generated explanations from data/store.sqlite", async () => {
+    const problems = (await loadProblemSets()).flatMap((s) => s.problems);
+    const withText = problems.filter((p) => p.explanation);
+    expect(withText.map((p) => p.id)).toEqual(expect.arrayContaining(["seed-001", "seed-002", "seed-003", "seed-004", "seed-005"]));
+    for (const p of withText) {
+      expect(p.explanationMeta?.model, p.id).toBeTruthy();
+      expect(p.explanationMeta?.generatedAt, p.id).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
 });
 
 describe("validateProblem", () => {

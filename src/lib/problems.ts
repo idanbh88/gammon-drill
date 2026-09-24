@@ -1,10 +1,13 @@
 /**
- * Server-side loader for problem sets. Every *.json file in data/ is one ProblemSet.
+ * Server-side loader for problem sets. Every *.json file in data/ is one ProblemSet; generated
+ * explanations are overlaid from data/store.sqlite (see store.ts).
  * Do not import this from client components (it uses node:fs).
  */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ProblemSetSchema, type Problem, type ProblemSet } from "@/types/problem";
+import { ERROR_THRESHOLD } from "./matches";
+import { applyStore, readLatestExplanations, readMistakeProblems } from "./store";
 import { validateProblem } from "./validate";
 
 export const DATA_DIR = path.join(process.cwd(), "data");
@@ -41,12 +44,32 @@ export async function loadProblemSets(dir: string = DATA_DIR): Promise<ProblemSe
     }
     sets.push(parsed.data);
   }
-  return sets;
+  // Generated explanations live in dir/store.sqlite; the newest row per XGID wins over the
+  // JSON field, which stays as a hand-written fallback.
+  const latest = readLatestExplanations(dir);
+  if (latest.size === 0) return sets;
+  return sets.map((s) => ({ ...s, problems: applyStore(s.problems, latest) }));
 }
 
 export async function loadProblems(dir: string = DATA_DIR): Promise<Problem[]> {
   const sets = await loadProblemSets(dir);
   return sets.flatMap((s) => s.problems);
+}
+
+/**
+ * What the quiz draws from: every problem set, plus the user's own mistakes from the store
+ * (games against gnubg and imported matches; see mistakes.ts). A mistake that fails validation
+ * or repeats an id is left out rather than breaking the quiz.
+ */
+export async function loadQuizProblems(dir: string = DATA_DIR): Promise<Problem[]> {
+  const problems = await loadProblems(dir);
+  const ids = new Set(problems.map((p) => p.id));
+  for (const p of readMistakeProblems(dir, ERROR_THRESHOLD)) {
+    if (ids.has(p.id) || validateProblem(p).length > 0) continue;
+    ids.add(p.id);
+    problems.push(p);
+  }
+  return problems;
 }
 
 

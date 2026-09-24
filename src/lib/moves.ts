@@ -126,11 +126,8 @@ function dfs(state: BoardState, order: number[], idx: number, steps: MoveStep[],
   if (!moved) out.push({ steps, dice, state });
 }
 
-/**
- * All distinct legal plays for the acting player. Empty array = no legal move (must pass).
- * Applies the "use both dice if possible, else the larger" rule.
- */
-export function generatePlays(view: PerspectiveView, dice: [number, number]): Play[] {
+/** Every complete legal step sequence, in every order (the "use both dice if possible, else the larger" rule applied). */
+function completeSequences(view: PerspectiveView, dice: [number, number]): Sequence[] {
   const start = stateFromView(view);
   const [a, b] = dice;
   const sequences: Sequence[] = [];
@@ -145,7 +142,29 @@ export function generatePlays(view: PerspectiveView, dice: [number, number]): Pl
     const withBig = candidates.filter((s) => s.dice[0] === big);
     if (withBig.length > 0) candidates = withBig;
   }
+  return candidates;
+}
 
+/** One way to enter a legal play: its steps in order and the die each step uses. */
+export interface LegalSequence {
+  steps: MoveStep[];
+  dice: number[];
+}
+
+/**
+ * Every legal play as step sequences in every order they can be entered (not de-duplicated by
+ * result), each with the die per step, for step-by-step move entry. Empty = no legal move.
+ */
+export function legalSequences(view: PerspectiveView, dice: [number, number]): LegalSequence[] {
+  return completeSequences(view, dice).map((s) => ({ steps: s.steps, dice: s.dice }));
+}
+
+/**
+ * All distinct legal plays for the acting player. Empty array = no legal move (must pass).
+ * Applies the "use both dice if possible, else the larger" rule.
+ */
+export function generatePlays(view: PerspectiveView, dice: [number, number]): Play[] {
+  const candidates = completeSequences(view, dice);
   const seen = new Map<string, Play>();
   for (const seq of candidates) {
     const key = stateKey(seq.state);

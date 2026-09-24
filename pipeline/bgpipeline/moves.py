@@ -115,8 +115,8 @@ def _dfs(state: State, order: list[int], idx: int, steps: list[Step], dice: list
         out.append((steps, dice, state))
 
 
-def generate_plays(view: View, dice: tuple[int, int]) -> list[Play]:
-    """All distinct legal plays; empty list = no legal move. Applies the both-dice / larger-die rule."""
+def _complete_sequences(view: View, dice: tuple[int, int]) -> list[tuple[list[Step], list[int], State]]:
+    """Every complete legal step sequence in every order (both-dice / larger-die rule applied)."""
     start = state_from_view(view)
     a, b = dice
     sequences: list[tuple[list[Step], list[int], State]] = []
@@ -132,8 +132,19 @@ def generate_plays(view: View, dice: tuple[int, int]) -> list[Play]:
         with_big = [s for s in candidates if s[1][0] == big]
         if with_big:
             candidates = with_big
+    return candidates
+
+
+def legal_sequences(view: View, dice: tuple[int, int]) -> list[tuple[list[Step], list[int]]]:
+    """Every legal play as (steps, die per step) in every order it can be entered (not
+    de-duplicated by result); port of ``legalSequences`` in moves.ts. Empty = no legal move."""
+    return [(steps, used) for steps, used, _state in _complete_sequences(view, dice)]
+
+
+def generate_plays(view: View, dice: tuple[int, int]) -> list[Play]:
+    """All distinct legal plays; empty list = no legal move. Applies the both-dice / larger-die rule."""
     seen: dict[tuple, Play] = {}
-    for steps, used, state in candidates:
+    for steps, used, state in _complete_sequences(view, dice):
         k = state.key()
         if k in seen:
             continue

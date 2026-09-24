@@ -1,0 +1,37 @@
+[
+  {
+    "id": "seed-001",
+    "xgid": "-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10",
+    "model": "claude-opus-5",
+    "generatedAt": "2026-09-03",
+    "explanation": "Making the 5-point with 8/5 6/5 is the strongest opening roll in the game: it takes the golden point, gives Blue a second home-board point and the start of a prime in front of White's two checkers on Blue's 1-point, and it does all that without leaving a shot. The gammon numbers tell the story — 17.0% gammons won against 11.7% lost, and 55.1% wins, a huge edge for move one. Everything else is a builder or a safety play that ignores the point: 24/23 13/10 costs 0.231, 24/20 costs 0.245 and 13/9 costs 0.246, all of them settling for a slotted or unmade structure instead of the key blocking point. 13/10 6/5 (down 0.247) even breaks the 6-point spare to slot rather than make the 5-point outright, and 24/23 24/21 (down 0.260) is pure back-checker shuffling that concedes the initiative entirely."
+  },
+  {
+    "id": "seed-002",
+    "xgid": "-b----E-C---eE---c-e----B-:0:0:1:63:0:0:0:7:10",
+    "model": "claude-opus-5",
+    "generatedAt": "2026-09-03",
+    "explanation": "The best play, 24/18 13/10, does two jobs at once: the six escapes one back checker to White's bar point, where it either makes an advanced anchor next turn or forces White to hit loosely in his outfield, while the three brings down a builder that bears directly on the 5-point, 4-point and Blue's own bar point. The pure runner 24/15 is virtually as good, only 0.016 behind, but it puts the second checker in a spot where it does no constructive work and leaves the straggler alone on the 24-point instead of adding to Blue's home-board attack. The split-and-point tries fare worse: 24/21 13/7 (‑0.055) slots the bar point at a moment when Blue has no board and only a tiny split back, and 24/21 24/18 (‑0.067) strings out both rear checkers with nothing developing in front, which shows up as the highest gammon-loss figure at 14.5%. Playing safe with 13/4 costs 0.074 by burying a checker on a point Blue doesn't want yet and abandoning any attempt to improve the back position, and 13/10 13/7 loses 0.101 because it strips the midpoint and leaves two blots while both back checkers stay stuck on the 24-point."
+  },
+  {
+    "id": "seed-003",
+    "xgid": "---BCCD-B-A--a-a-b-dcca---:0:0:1:00:2:1:0:7:10",
+    "model": "claude-opus-5",
+    "generatedAt": "2026-09-03",
+    "explanation": "This is a pure race with no contact left anywhere on the board, so everything rides on the pip count: Blue is on roll with 83 against 92, a nine-pip lead that translates to just under 76% wins and zero gammon chances either way. That is comfortably past the doubling threshold — Blue's advantage is large enough that a good exchange of rolls would blow past White's take point next turn — while still leaving White the roughly 24% needed to take, with cube ownership in a short race adding enough to justify it. Holding the cube (no double, take) costs 0.040 by giving up the leverage of playing the game for two points when Blue is the clear favourite. Dropping is much worse for White, a 0.208 error, since a nine-pip deficit in an 83-pip race is a routine take, and playing on for a gammon (no double, pass \"too good\") is off the table entirely at a 0.248 loss because with no contact and no back checkers Blue can never win more than a single point."
+  },
+  {
+    "id": "seed-004",
+    "xgid": "-b---BD-C---dD---c-cba--AA:0:0:1:43:0:0:0:7:10",
+    "model": "claude-opus-5",
+    "generatedAt": "2026-09-03",
+    "explanation": "Hitting is clear — White's blot on Blue's 21-point is loose in front of Blue's back checkers — but the real gain is that bar/21* 24/21 turns the hit into an advanced anchor in the same stroke. Blue comes in, gains the tempo, and instantly solves the problem of the two back checkers: no blots anywhere, White has to come in from the bar against a two-point board, and Blue's losing gammons drop to 7.8% while wins climb to 60.7%. Every other hit leaves the 21-point blot and the straggler on 24 exposed while White is on the bar with return shots: bar/21* 13/10 loses 0.139, bar/21*/18 loses 0.149 (running but still split and loose), bar/21* 8/5 loses 0.165 by merely stacking a made point, and bar/21* 6/3 loses 0.293 since burying a checker on the 3-point buys nothing. Not hitting at all with bar/22 13/9 is a blunder worth 0.599 — it hands White a free tempo and swaps a 19.6% gammon-win profile for one where Blue is gammoned 17.9% of the time."
+  },
+  {
+    "id": "seed-005",
+    "xgid": "--ABCBB------------bcb-ba-:1:-1:-1:52:2:3:0:7:10",
+    "model": "claude-opus-5",
+    "generatedAt": "2026-09-03",
+    "explanation": "This is a pure race with no contact left — White has nothing back and no hit is available — so the only currency is checkers off and pips saved, and 5/off 2/off simply banks two men while leaving a perfectly playable 6-6-5-5-4-4-2-1 spread that continues to take two off with almost everything. With both sides at five borne off and Blue on roll by a couple of pips, every tempo counts: falling a checker behind here is what decides whether Blue reaches 5-2 in this 7-point match or hands White the doubled game. The \"smoothing\" tries are all fear of gaps that can't hurt in a bearoff: 5/3 5/off costs 0.090 and 6/4 5/off costs 0.163, each giving up a full checker off for cosmetics, while 6/1 2/off (-0.199) not only takes one off but buries a checker on the ace point where it does no work. 5/off 4/2 (-0.217) is the same one-checker error with wasted pips, and 6/1 5/3 (-0.253) is worst of all, taking nothing off and burying a man in a race Blue is currently winning. When you're ahead in a straight bearoff race, take the men off — the win percentage drops from 68.2% to as low as 59.0% for the alternatives."
+  }
+]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Problem } from "@/types/problem";
-import { applyFilters, categoryCounts, DEFAULT_FILTERS, difficultyBand, isDefaultFilters, loadFilters } from "@/lib/filters";
+import { applyFilters, categoryCounts, DEFAULT_FILTERS, difficultyBand, FILTERS_KEY, FILTERS_KEY_V1, isDefaultFilters, loadFilters } from "@/lib/filters";
 
 function problem(id: string, type: Problem["type"], gap: number, categories: Problem["categories"]): Problem {
   return {
@@ -39,7 +39,30 @@ describe("applyFilters", () => {
     expect(applyFilters(P, { ...DEFAULT_FILTERS, type: "cube" }).map((p) => p.id)).toEqual(["p3", "p4"]);
     expect(applyFilters(P, { ...DEFAULT_FILTERS, categories: ["hit-or-not", "racing-cube"] }).map((p) => p.id)).toEqual(["p2", "p3"]);
     expect(applyFilters(P, { ...DEFAULT_FILTERS, difficulty: ["hard", "medium"] }).map((p) => p.id)).toEqual(["p1", "p2", "p4"]);
-    expect(applyFilters(P, { categories: ["holding-game"], type: "checker", difficulty: [] })).toEqual([]);
+    expect(applyFilters(P, { categories: ["holding-game"], type: "checker", difficulty: [], source: "all" })).toEqual([]);
+  });
+
+  it("filters by source: the problem sets or the user's own mistakes", () => {
+    const mine = { ...P[0], id: "m1", origin: { site: "gnubg", matchId: 1, opponent: "gnubg", playedAt: null, played: "x", loss: 0.1 } };
+    const all = [...P, mine];
+    expect(applyFilters(all, { ...DEFAULT_FILTERS, source: "mistakes" }).map((p) => p.id)).toEqual(["m1"]);
+    expect(applyFilters(all, { ...DEFAULT_FILTERS, source: "sets" })).toHaveLength(P.length);
+    expect(applyFilters(all, DEFAULT_FILTERS)).toHaveLength(P.length + 1);
+    expect(isDefaultFilters({ ...DEFAULT_FILTERS, source: "mistakes" })).toBe(false);
+  });
+
+  it("carries filters saved under the v1 key over to v2", () => {
+    const saved = new Map<string, string>([[FILTERS_KEY_V1, JSON.stringify({ categories: ["blitz"], type: "cube", difficulty: ["hard"] })]]);
+    const g = globalThis as { window?: unknown };
+    g.window = { localStorage: { getItem: (k: string) => saved.get(k) ?? null, setItem: (k: string, v: string) => void saved.set(k, v) } };
+    try {
+      expect(loadFilters()).toEqual({ categories: ["blitz"], type: "cube", difficulty: ["hard"], source: "all" });
+      expect(JSON.parse(saved.get(FILTERS_KEY)!)).toMatchObject({ categories: ["blitz"], source: "all" });
+      saved.set(FILTERS_KEY, JSON.stringify({ ...DEFAULT_FILTERS, source: "mistakes" }));
+      expect(loadFilters().source).toBe("mistakes");
+    } finally {
+      delete g.window;
+    }
   });
 
   it("counts problems per category", () => {

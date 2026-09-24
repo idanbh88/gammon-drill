@@ -1,7 +1,8 @@
 /**
- * Study filters: category, question type and difficulty. Difficulty is the equity gap
- * between the best and the second-best answer (smaller gap = harder). The chosen filters
- * are remembered in localStorage as a convenience.
+ * Study filters: category, question type, difficulty and source. Difficulty is the equity gap
+ * between the best and the second-best answer (smaller gap = harder); the source separates the
+ * problem sets from the user's own mistakes (problems with an origin). The chosen filters are
+ * remembered in localStorage as a convenience.
  */
 import { CATEGORIES, QUESTION_TYPES, type Category, type Problem, type QuestionType } from "@/types/problem";
 import { difficulty } from "./problem-utils";
@@ -26,21 +27,30 @@ export const BAND_LABEL: Record<DifficultyBand, string> = {
   easy: `Easy (gap ≥ ${MEDIUM_MAX})`,
 };
 
+export const SOURCES = ["all", "sets", "mistakes"] as const;
+export type Source = (typeof SOURCES)[number];
+
+export const SOURCE_LABEL: Record<Source, string> = { all: "All", sets: "Problem sets", mistakes: "My mistakes" };
+
 export interface Filters {
   /** Empty = any category; otherwise a problem matches when it carries at least one of them. */
   categories: Category[];
   type: QuestionType | "all";
   /** Empty = any difficulty. */
   difficulty: DifficultyBand[];
+  /** Problem sets (data/*.json), the user's own mistakes, or both. */
+  source: Source;
 }
 
-export const DEFAULT_FILTERS: Filters = { categories: [], type: "all", difficulty: [] };
+export const DEFAULT_FILTERS: Filters = { categories: [], type: "all", difficulty: [], source: "all" };
 
 export function isDefaultFilters(f: Filters): boolean {
-  return f.categories.length === 0 && f.type === "all" && f.difficulty.length === 0;
+  return f.categories.length === 0 && f.type === "all" && f.difficulty.length === 0 && f.source === "all";
 }
 
 export function matchesFilters(p: Problem, f: Filters): boolean {
+  if (f.source === "sets" && p.origin) return false;
+  if (f.source === "mistakes" && !p.origin) return false;
   if (f.type !== "all" && p.type !== f.type) return false;
   if (f.categories.length > 0 && !p.categories.some((c) => f.categories.includes(c))) return false;
   if (f.difficulty.length > 0 && !f.difficulty.includes(difficultyBand(p))) return false;
@@ -58,7 +68,9 @@ export function categoryCounts(problems: readonly Problem[]): Record<Category, n
   return counts;
 }
 
-export const FILTERS_KEY = "bg-trainer/filters/v1";
+export const FILTERS_KEY = "bg-trainer/filters/v2";
+/** v1 had no source; its choices carry over with every source. */
+export const FILTERS_KEY_V1 = "bg-trainer/filters/v1";
 
 function sanitize(x: unknown): Filters {
   if (!x || typeof x !== "object") return DEFAULT_FILTERS;
@@ -70,14 +82,20 @@ function sanitize(x: unknown): Filters {
   const bands = Array.isArray(o.difficulty)
     ? (o.difficulty.filter((d): d is DifficultyBand => (DIFFICULTY_BANDS as readonly string[]).includes(d as string)) as DifficultyBand[])
     : [];
-  return { categories, type, difficulty: bands };
+  const source = (SOURCES as readonly string[]).includes(o.source as string) ? (o.source as Source) : "all";
+  return { categories, type, difficulty: bands, source };
 }
 
 export function loadFilters(): Filters {
   try {
     if (typeof window === "undefined") return DEFAULT_FILTERS;
     const raw = window.localStorage.getItem(FILTERS_KEY);
-    return raw ? sanitize(JSON.parse(raw)) : DEFAULT_FILTERS;
+    if (raw) return sanitize(JSON.parse(raw));
+    const old = window.localStorage.getItem(FILTERS_KEY_V1);
+    if (!old) return DEFAULT_FILTERS;
+    const migrated = sanitize(JSON.parse(old));
+    window.localStorage.setItem(FILTERS_KEY, JSON.stringify(migrated));
+    return migrated;
   } catch {
     return DEFAULT_FILTERS;
   }

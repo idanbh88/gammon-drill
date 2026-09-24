@@ -32,6 +32,57 @@ class ParseError(ValueError):
     pass
 
 
+def correct_from_proper(proper: str) -> str:
+    """The joint answer id for gnubg's proper cube action ("Double, take", "No redouble, take",
+    "Too good to double, pass", "Never double, take (dead cube)", "Optional double, pass", ...)."""
+    a = re.sub(r"\s*\([^)]*\)\s*$", "", proper).strip().lower()
+    if "too good" in a:
+        return "too-good"
+    if a.startswith("no") or a.startswith("never"):
+        return "no-double"
+    if "pass" in a:
+        return "double-pass"
+    return "double-take"
+
+
+def cube_from_cfevaluate(cf, evaluation=None) -> dict:
+    """The parsed cube decision (same shape as ``parse_cube_text``) from gnubg's Python API:
+    ``cf`` is ``gnubg.cfevaluate(...)`` = (optimal, no double, double/take, double/pass,
+    recommendation code, recommendation text) and ``evaluation`` is ``gnubg.evaluate(...)`` =
+    (win, win gammon, win backgammon, lose gammon, lose backgammon, cubeless equity), both for
+    the player on roll (the doubler)."""
+    if cf is None or len(cf) < 6:
+        raise ParseError(f"unexpected cfevaluate result {cf!r}")
+    proper = str(cf[5]).strip()
+    probs = None
+    cubeless = None
+    if evaluation is not None and len(evaluation) >= 5:
+        w, wg, wbg, lg, lbg = (float(x) for x in evaluation[:5])
+        probs = {"win": w, "winGammon": wg, "winBackgammon": wbg, "loseGammon": lg, "loseBackgammon": lbg}
+        if len(evaluation) >= 6:
+            cubeless = float(evaluation[5])
+    return {
+        "nd": float(cf[1]),
+        "dt": float(cf[2]),
+        "dp": float(cf[3]),
+        "proper": proper,
+        "correct": correct_from_proper(proper),
+        "probs": probs,
+        "cubeless": cubeless,
+    }
+
+
+def flip_probs(p: dict) -> dict:
+    """Probabilities from the other player's side."""
+    return {
+        "win": 1.0 - p["win"],
+        "winGammon": p["loseGammon"],
+        "winBackgammon": p["loseBackgammon"],
+        "loseGammon": p["winGammon"],
+        "loseBackgammon": p["winBackgammon"],
+    }
+
+
 def parse_cube_text(text: str) -> dict:
     """Parse gnubg's ``hint`` output for a cube decision.
 
@@ -55,15 +106,7 @@ def parse_cube_text(text: str) -> dict:
     if not pm:
         raise ParseError(f"no 'Proper cube action' line in gnubg output:\n{text[-1500:]}")
     proper = re.sub(r"\s*\([^)]*\)\s*$", "", pm.group("action")).strip()
-    a = proper.lower()
-    if "too good" in a:
-        correct = "too-good"
-    elif a.startswith("no"):
-        correct = "no-double"
-    elif "pass" in a:
-        correct = "double-pass"
-    else:
-        correct = "double-take"
+    correct = correct_from_proper(proper)
     probs = None
     pr = _PROBS.search(text)
     if pr:
@@ -91,7 +134,12 @@ def cube_answers(parsed: dict, kind: str, centered: bool, probs: dict | None) ->
     Joint answers (dice 00) are scored like gnubg's own error report: a wrong doubling
     decision costs |min(DT, DP) - ND|, a wrong take/pass claim costs |DT - DP|, and both are
     added when both halves are wrong. Take/pass answers (dice D) cost |DT - DP|.
+
+    ``probs`` are gnubg's, for the player on roll (the doubler); take/pass answers get them
+    from the responder's side.
     """
+    if probs and kind == "cube-take":
+        probs = flip_probs(probs)
     nd, dt, dp = parsed["nd"], parsed["dt"], parsed["dp"]
     d_value = min(dt, dp)
     correct = parsed["correct"]
@@ -179,9 +227,13 @@ def build_problem(
         answers = chequer_answers(raw["chequer"], max_answers)
         ptype = "checker"
     else:
-        if not raw.get("cube_text"):
+        # A pre-parsed decision (gnubg_server: cfevaluate) or the text-mode hint (gnubg_runner).
+        if raw.get("cube"):
+            parsed = raw["cube"]
+        elif raw.get("cube_text"):
+            parsed = parse_cube_text(raw["cube_text"])
+        else:
             raise ParseError(f"no cube analysis for {xgid}")
-        parsed = parse_cube_text(raw["cube_text"])
         answers = cube_answers(parsed, kind, pos.cube_owner == 0, parsed.get("probs"))
         ptype = "cube"
     if len(answers) < 2:

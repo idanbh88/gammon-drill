@@ -21,3 +21,12 @@ pipeline/**/__pycache__/
 pipeline/out/
 pipeline/.pytest_cache/
 pipeline/uv.lock.bak
+
+# sqlite side files (data/store.sqlite itself is committed)
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Backgammon Galaxy lessons: Galaxy's material (the exports, their pictures and lessons.sqlite)
+# stays on this machine; see docs/SPEC.md § 5 Lesson store
+data/lessons/

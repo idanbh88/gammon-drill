@@ -7,6 +7,8 @@ import {
   DEFAULT_FILTERS,
   DIFFICULTY_BANDS,
   isDefaultFilters,
+  SOURCE_LABEL,
+  SOURCES,
   type DifficultyBand,
   type Filters,
 } from "@/lib/filters";
@@ -54,6 +56,15 @@ export default function FilterPanel({
         {problems.length} problems · <span data-due>{due}</span> due
       </summary>
       <div className="grid gap-3 border-t border-stone-200 px-4 py-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-20 text-stone-500">Source</span>
+          {SOURCES.map((s) => (
+            <Chip key={s} on={filters.source === s} onClick={() => onChange({ ...filters, source: s })}>
+              {SOURCE_LABEL[s]}
+              {s === "mistakes" && <span className="opacity-60"> {problems.filter((p) => p.origin).length}</span>}
+            </Chip>
+          ))}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-20 text-stone-500">Type</span>
           {(["all", "checker", "cube"] as const).map((t) => (

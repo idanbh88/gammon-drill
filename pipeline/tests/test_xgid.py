@@ -1,5 +1,6 @@
 import pytest
 
+from bgpipeline.moves import apply_steps, parse_play, state_from_view
 from bgpipeline.xgid import (
     XgidError,
     acting_player,
@@ -9,6 +10,7 @@ from bgpipeline.xgid import (
     pip_counts,
     to_perspective,
     to_xgid,
+    with_state,
 )
 
 OPENING = "-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10"
@@ -59,6 +61,22 @@ def test_decisions():
     assert decision_kind(offered) == "cube-take" and acting_player(offered) == 2
     money = parse_xgid("-b----E-C---eE---c-e----B-:0:0:1:00:0:0:3:0:10")
     assert money.jacoby and money.beavers and not money.crawford
+
+
+@pytest.mark.parametrize("xgid", SEEDS)
+def test_with_state_round_trip(xgid):
+    pos = parse_xgid(xgid)
+    for me in (1, 2):
+        assert to_xgid(with_state(pos, me, state_from_view(to_perspective(pos, me)))) == xgid
+
+
+def test_with_state_after_a_play():
+    pos = parse_xgid(OPENING)
+    as_one = apply_steps(state_from_view(to_perspective(pos, 1)), parse_play("8/5 6/5"))
+    assert to_xgid(with_state(pos, 1, as_one)) == "-b---BD-B---eE---c-e----B-:0:0:1:31:0:0:0:7:10"
+    as_two = apply_steps(state_from_view(to_perspective(pos, 2)), parse_play("8/5 6/5"))
+    assert to_xgid(with_state(pos, 2, as_two)) == "-b----E-C---eE---b-db---B-:0:0:1:31:0:0:0:7:10"
+    assert pos.board[5] == 0  # input not mutated
 
 
 @pytest.mark.parametrize(

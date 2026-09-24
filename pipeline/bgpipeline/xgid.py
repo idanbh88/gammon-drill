@@ -10,8 +10,13 @@ are player 1's checkers, lowercase player 2's; borne-off checkers are implied.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - moves imports this module
+    from .moves import State
 
 CHECKERS_PER_SIDE = 15
 BOARD_LEN = 26
@@ -265,6 +270,23 @@ def to_perspective(pos: Position, me: int) -> View:
 
 def acting_view(pos: Position) -> View:
     return to_perspective(pos, acting_player(pos))
+
+
+def with_state(pos: Position, me: int, state: State) -> Position:
+    """The position with the board replaced by ``state`` (a ``moves.State`` in ``me``'s
+    numbering). Inverse of ``to_perspective`` + ``state_from_view``; other fields are kept."""
+    board = [0] * BOARD_LEN
+    if me == 1:
+        for i in range(1, 25):
+            board[i] = state.points[i]
+        board[P1_BAR] = state.my_bar
+        board[P2_BAR] = -state.their_bar
+    else:
+        for i in range(1, 25):
+            board[25 - i] = -state.points[i]
+        board[P2_BAR] = -state.my_bar
+        board[P1_BAR] = state.their_bar
+    return dataclasses.replace(pos, board=tuple(board))
 
 
 def view_from_counts(

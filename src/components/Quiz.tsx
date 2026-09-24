@@ -8,9 +8,12 @@ import { difficulty, offeredAnswers } from "@/lib/problem-utils";
 import { cardState, cardStates, dueCount, humanizeInterval, pickNext, type PickReason } from "@/lib/scheduler";
 import { shuffle } from "@/lib/shuffle";
 import { clearAttempts, computeStats, loadAttempts, saveAttempt, type Attempt } from "@/lib/storage";
+import { formatLoss, formatPlayedAt } from "@/lib/matches";
 import { parseXgid } from "@/lib/xgid";
 import AnswerReveal from "./AnswerReveal";
 import Board from "./Board";
+import { QuizToggle } from "./DecisionFeedback";
+import ExplanationPanel from "./ExplanationPanel";
 import FilterPanel from "./FilterPanel";
 import SessionStats from "./SessionStats";
 
@@ -43,11 +46,13 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
   const [attempts, setAttempts] = useState<Attempt[]>(() => loadAttempts());
   const [current, setCurrent] = useState<Current | null>(() => pick(applyFilters(problems, loadFilters()), loadAttempts(), null));
   const [count, setCount] = useState(1);
+  /** Explanations generated in this session, keyed by problem id (the store has them for next time). */
+  const [generated, setGenerated] = useState<Record<string, Pick<Problem, "explanation" | "explanationMeta">>>({});
 
   const pool = useMemo(() => applyFilters(problems, filters), [problems, filters]);
   const due = useMemo(() => dueCount(pool, cardStates(pool, attempts)), [pool, attempts]);
   const stats = useMemo(() => computeStats(attempts), [attempts]);
-  const problem = current?.problem;
+  const problem = useMemo(() => (current ? { ...current.problem, ...generated[current.problem.id] } : undefined), [current, generated]);
   const position = useMemo(() => (problem ? parseXgid(problem.xgid) : null), [problem]);
 
   const changeFilters = useCallback(
@@ -86,7 +91,9 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(e.target.tagName) && e.key === " ") return;
+      // A focused button handles Space and Enter itself (otherwise Enter on "Next problem" or
+      // "Generate explanation" would also advance the quiz); form controls keep every key.
+      if (e.target instanceof HTMLElement && e.target.tagName === "BUTTON" && (e.key === " " || e.key === "Enter")) return;
       if (e.target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
       if (!current) return;
       const n = Number(e.key);
@@ -143,6 +150,11 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
               <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${reason.className}`} title={reason.title} data-reason={current.reason}>
                 {reason.text}
               </span>
+              {problem.origin && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900" data-origin={problem.origin.site}>
+                  My mistake
+                </span>
+              )}
               <span>·</span>
               <span className="font-mono">{problem.id}</span>
               <span>·</span>
@@ -191,18 +203,23 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
                   </span>
                 )}
               </div>
-              <AnswerReveal answers={problem.answers} pickedId={current.picked} offeredIds={current.choices.map((c) => c.id)} />
-              <div className="rounded-lg border border-stone-200 bg-white p-4">
-                <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-stone-500">Explanation</h2>
-                <p className="whitespace-pre-line text-stone-800">
-                  {problem.explanation || <span className="italic text-stone-400">No explanation yet.</span>}
+              <AnswerReveal answers={problem.answers} pickedId={current.picked} offeredIds={current.choices.map((c) => c.id)} gameId={problem.origin?.played} />
+              {problem.origin && (
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-600" data-origin-line>
+                  <span>
+                    {problem.origin.site === "gnubg" ? "Your game against gnubg" : `Your ${problem.origin.site} match against ${problem.origin.opponent}`}
+                    {problem.origin.playedAt && ` on ${formatPlayedAt(problem.origin.playedAt).slice(0, 10)}`}: you played{" "}
+                    <span className="font-mono">{problem.answers.find((a) => a.id === problem.origin!.played)?.label ?? problem.origin.played}</span>{" "}
+                    <span className="font-mono text-red-700">{formatLoss(problem.origin.loss)}</span>.
+                  </span>
+                  <QuizToggle key={problem.id} decisionId={problem.id} initial={true} />
                 </p>
-                {problem.explanationMeta && (
-                  <p className="mt-2 text-xs text-stone-400">
-                    Generated by {problem.explanationMeta.model} on {problem.explanationMeta.generatedAt}.
-                  </p>
-                )}
-              </div>
+              )}
+              <ExplanationPanel
+                key={problem.id}
+                problem={problem}
+                onGenerated={(id, explanation, explanationMeta) => setGenerated((g) => ({ ...g, [id]: { explanation, explanationMeta } }))}
+              />
               <button
                 type="button"
                 onClick={next}
@@ -227,7 +244,17 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
               <dt>XGID</dt>
               <dd className="font-mono break-all">{problem.xgid}</dd>
               <dt>Source</dt>
-              <dd>{problem.source ?? "—"}</dd>
+              <dd>
+                {problem.source ?? "—"}
+                {problem.origin && (
+                  <>
+                    {" · "}
+                    <a href={`/matches/${problem.origin.matchId}`} className="text-blue-700 underline">
+                      the match
+                    </a>
+                  </>
+                )}
+              </dd>
               <dt>Engine</dt>
               <dd>
                 {problem.analysis?.engine ?? "—"}

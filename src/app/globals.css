@@ -11,10 +11,43 @@
   --color-blue-checker-dark: #1b3f99;
   --color-white-checker: #f3efe4;
   --color-white-checker-dark: #b8b2a2;
+  /* click-to-move and last-move marks on the board */
+  --color-movable: rgb(250 204 21 / 0.22);
+  --color-select: rgb(250 204 21 / 0.55);
+  --color-target: rgb(74 222 128 / 0.45);
+  --color-mark: #f59e0b;
 }
 
 :root {
   color-scheme: light;
+}
+
+/* Dice tumbling onto the board after a roll (Board.tsx: DiceRow with `rolling`). */
+@keyframes dice-roll {
+  0% {
+    transform: translateY(-22px) rotate(-35deg) scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(3px) rotate(10deg) scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.dice-roll > g {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dice-roll 420ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dice-roll > g {
+    animation: none;
+  }
 }
 
 body {

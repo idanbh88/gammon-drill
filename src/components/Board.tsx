@@ -6,49 +6,51 @@ import {
   toPerspective,
   type PerspectiveView,
 } from "@/lib/board";
+import {
+  BAR_OFFSET,
+  BAR_W,
+  BAR_X,
+  BOARD_H,
+  BOT_Y,
+  CHIP,
+  H,
+  LEFT,
+  MAX_STACK,
+  MID_Y,
+  PH,
+  PW,
+  R,
+  RIGHT,
+  T,
+  TOP_Y,
+  TRAY_W,
+  TRAY_X,
+  W,
+  areaOf,
+  columnOf,
+  columnX,
+  topSlot,
+  type Side,
+} from "@/lib/board-geometry";
 import type { Player, Position } from "@/lib/xgid";
 
 /**
  * SVG backgammon board. The `perspective` player (default: the player who has to act) is
  * drawn at the bottom as Blue, moving counter-clockwise: home board bottom-right (points 1-6),
- * 7-12 bottom-left, 13-18 top-left, 19-24 top-right.
+ * 7-12 bottom-left, 13-18 top-left, 19-24 top-right. Layout constants and checker positions
+ * live in board-geometry.ts. Without the optional play props below the board is a static
+ * picture (quiz, match review, /board); no hooks here, so server pages can render it.
  */
-
-const W = 960;
-const H = 720;
-const T = 40; // header height; the board frame starts here
-const BOARD_H = 640;
-const FRAME = 30; // frame thickness top/bottom
-const PW = 60; // point width
-const PH = 240; // point height
-const R = 23; // checker radius
-const LEFT = 80; // x where the left half starts (cube column before it)
-const BAR_X = LEFT + 6 * PW; // 440
-const BAR_W = 60;
-const RIGHT = BAR_X + BAR_W; // 500
-const TRAY_X = RIGHT + 6 * PW; // 860
-const TRAY_W = 80;
-const TOP_Y = T + FRAME; // top of the playing surface
-const BOT_Y = T + BOARD_H - FRAME; // bottom of the playing surface
-const MID_Y = (TOP_Y + BOT_Y) / 2;
-const MAX_STACK = 5;
 
 const BLUE = "var(--color-blue-checker)";
 const BLUE_DARK = "var(--color-blue-checker-dark)";
 const WHITE = "var(--color-white-checker)";
 const WHITE_DARK = "var(--color-white-checker-dark)";
 
-function columnOf(point: number): { c: number; top: boolean } {
-  return point <= 12 ? { c: 12 - point, top: false } : { c: point - 13, top: true };
-}
-
-function columnX(c: number): number {
-  return c < 6 ? LEFT + c * PW : RIGHT + (c - 6) * PW;
-}
-
-function Checker({ cx, cy, mine, label }: { cx: number; cy: number; mine: boolean; label?: string }) {
+export function Checker({ cx, cy, mine, label, lifted }: { cx: number; cy: number; mine: boolean; label?: string; lifted?: boolean }) {
   return (
     <g>
+      {lifted && <circle cx={cx + 3} cy={cy + 5} r={R} fill="rgb(0 0 0 / 0.25)" />}
       <circle cx={cx} cy={cy} r={R} fill={mine ? BLUE : WHITE} stroke={mine ? BLUE_DARK : WHITE_DARK} strokeWidth={2} />
       {label && (
         <text x={cx} y={cy + 6} textAnchor="middle" fontSize={18} fontWeight={700} fill={mine ? "#fff" : "#333"}>
@@ -122,12 +124,14 @@ const PIPS: Record<number, [number, number][]> = {
   ],
 };
 
-function Die({ cx, cy, value }: { cx: number; cy: number; value: number }) {
+function Die({ cx, cy, value, size = 48, used = false }: { cx: number; cy: number; value: number; size?: number; used?: boolean }) {
+  const h = size / 2;
+  const step = size * 0.27;
   return (
-    <g>
-      <rect x={cx - 24} y={cy - 24} width={48} height={48} rx={8} fill="#fffdf7" stroke="#333" strokeWidth={2} />
+    <g opacity={used ? 0.35 : 1} data-die={value} data-used={used || undefined}>
+      <rect x={cx - h} y={cy - h} width={size} height={size} rx={size / 6} fill="#fffdf7" stroke="#333" strokeWidth={2} />
       {PIPS[value].map(([dx, dy], i) => (
-        <circle key={i} cx={cx + dx * 13} cy={cy + dy * 13} r={5} fill="#222" />
+        <circle key={i} cx={cx + dx * step} cy={cy + dy * step} r={size / 9.6} fill="#222" />
       ))}
     </g>
   );
@@ -167,16 +171,120 @@ function cubeCaption(pos: Position, me: Player): string {
   return `Cube ${pos.cubeValue}, ${pos.cubeOwner === me ? ME_NAME : THEM_NAME} owns`;
 }
 
+/** Lit points while moving: in the bottom player's numbering, 25 = their bar, 0 = the tray. */
+export interface BoardHighlight {
+  /** Checkers that can move. */
+  sources: ReadonlySet<number>;
+  /** Where the checker being dragged can land. */
+  targets: ReadonlySet<number>;
+  /** The point a checker is being dragged from. */
+  selected?: number | null;
+}
+
+/** One checker step to mark (the last move), in the mover's own numbering (25 = bar, 0 = off). */
+export interface BoardMark {
+  side: Side;
+  from: number;
+  to: number;
+}
+
+/** The bottom player's dice while they move: in tap order, used ones dimmed. */
+export interface BoardDice {
+  values: number[];
+  used: boolean[];
+  /** The play is complete: pressing the dice plays it. */
+  ready?: boolean;
+  onPress?: () => void;
+}
+
+/** One checker left out of the drawing (being dragged or in flight), in `side`'s numbering. */
+export interface BoardHide {
+  side: Side;
+  point: number;
+}
+
 export interface BoardProps {
   position: Position;
   /** Player drawn at the bottom. Defaults to the player who has to act. */
   perspective?: Player;
   className?: string;
+  highlight?: BoardHighlight;
+  /** Steps of the last move, marked on the board. */
+  marks?: BoardMark[];
+  /** Replaces the default dice with the bottom player's, in tap order. */
+  dice?: BoardDice;
+  /** The opening roll, [the bottom player's die, the top player's]: one die on each side. */
+  openingDice?: [number, number];
+  /** Tumble the dice as they appear. */
+  rolling?: boolean;
+  hide?: BoardHide[];
+  /** Drawn last, above everything: checkers in flight or being dragged. */
+  overlay?: React.ReactNode;
+  /** Pointer input for playing: no text selection or scrolling on the board, and click targets for tests. */
+  interactive?: boolean;
+  svgRef?: React.Ref<SVGSVGElement>;
+  onPointerDown?: React.PointerEventHandler<SVGSVGElement>;
+  onPointerMove?: React.PointerEventHandler<SVGSVGElement>;
+  onPointerUp?: React.PointerEventHandler<SVGSVGElement>;
+  onPointerCancel?: React.PointerEventHandler<SVGSVGElement>;
 }
 
-export default function Board({ position, perspective, className }: BoardProps) {
+/** The view with hidden checkers taken off the drawing (counts only; pips stay true). */
+function drawnCounts(view: PerspectiveView, hide: BoardHide[] | undefined) {
+  const points = view.points.slice();
+  let { myBar, theirBar, myOff, theirOff } = view;
+  for (const h of hide ?? []) {
+    const bottom = h.side === "me";
+    if (h.point === 25) {
+      if (bottom) myBar = Math.max(0, myBar - 1);
+      else theirBar = Math.max(0, theirBar - 1);
+    } else if (h.point === 0) {
+      if (bottom) myOff = Math.max(0, myOff - 1);
+      else theirOff = Math.max(0, theirOff - 1);
+    } else if (bottom) {
+      if (points[h.point] > 0) points[h.point]--;
+    } else if (points[25 - h.point] < 0) {
+      points[25 - h.point]++;
+    }
+  }
+  return { points, myBar, theirBar, myOff, theirOff };
+}
+
+function DiceRow({ values, used, cx, cy, rolling }: { values: number[]; used?: boolean[]; cx: number; cy: number; rolling?: boolean }) {
+  const size = values.length > 2 ? 40 : 48;
+  const gap = values.length > 2 ? 10 : 22;
+  const width = values.length * size + (values.length - 1) * gap;
+  const x0 = cx - width / 2 + size / 2;
+  return (
+    <g className={rolling ? "dice-roll" : undefined}>
+      {values.map((v, i) => (
+        <Die key={i} cx={x0 + i * (size + gap)} cy={cy} value={v} size={size} used={used?.[i]} />
+      ))}
+    </g>
+  );
+}
+
+export default function Board({
+  position,
+  perspective,
+  className,
+  highlight,
+  marks,
+  dice,
+  openingDice,
+  rolling,
+  hide,
+  overlay,
+  interactive,
+  svgRef,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+}: BoardProps) {
   const me = perspective ?? actingPlayer(position);
   const view: PerspectiveView = toPerspective(position, me);
+  const drawn = drawnCounts(view, hide);
 
   const cubeY =
     position.cubeAction === "double" || position.cubeOwner === "center"
@@ -193,7 +301,7 @@ export default function Board({ position, perspective, className }: BoardProps) 
 
   const points: React.ReactNode[] = [];
   for (let p = 1; p <= 24; p++) {
-    const v = view.points[p];
+    const v = drawn.points[p];
     if (v === 0) continue;
     const { c, top } = columnOf(p);
     points.push(
@@ -208,8 +316,12 @@ export default function Board({ position, perspective, className }: BoardProps) 
     );
   }
 
+  const myDiceX = RIGHT + 3 * PW;
+  const theirDiceX = LEFT + 3 * PW;
+
   return (
     <svg
+      ref={svgRef}
       viewBox={`0 0 ${W} ${H}`}
       className={className ?? "h-auto w-full font-sans"}
       role="img"
@@ -218,6 +330,11 @@ export default function Board({ position, perspective, className }: BoardProps) 
       data-their-pips={view.theirPips}
       data-my-off={view.myOff}
       data-their-off={view.theirOff}
+      style={interactive ? { touchAction: "none", userSelect: "none" } : undefined}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
     >
       {/* header */}
       <text x={8} y={27} fontSize={18} fill="#333">
@@ -266,23 +383,34 @@ export default function Board({ position, perspective, className }: BoardProps) 
         );
       })}
 
+      {/* move highlights, under the checkers */}
+      {highlight && (
+        <g aria-hidden>
+          {[...highlight.sources].map((p) => {
+            const a = areaOf("me", p);
+            const on = p === highlight.selected;
+            return <rect key={`s${p}`} x={a.x} y={a.y} width={a.w} height={a.h} fill={on ? "var(--color-select)" : "var(--color-movable)"} />;
+          })}
+          {[...highlight.targets].map((p) => {
+            const a = areaOf("me", p);
+            return <rect key={`t${p}`} x={a.x} y={a.y} width={a.w} height={a.h} fill="var(--color-target)" data-target={p} />;
+          })}
+        </g>
+      )}
+
       {points}
 
       {/* bar */}
-      {view.myBar > 0 && (
-        <Stack cx={BAR_X + BAR_W / 2} startY={MID_Y + 60} dir={1} count={view.myBar} mine={true} />
-      )}
-      {view.theirBar > 0 && (
-        <Stack cx={BAR_X + BAR_W / 2} startY={MID_Y - 60} dir={-1} count={view.theirBar} mine={false} />
-      )}
+      {drawn.myBar > 0 && <Stack cx={BAR_X + BAR_W / 2} startY={MID_Y + BAR_OFFSET} dir={1} count={drawn.myBar} mine={true} />}
+      {drawn.theirBar > 0 && <Stack cx={BAR_X + BAR_W / 2} startY={MID_Y - BAR_OFFSET} dir={-1} count={drawn.theirBar} mine={false} />}
 
       {/* bear-off tray */}
       <rect x={TRAY_X + 10} y={TOP_Y} width={TRAY_W - 20} height={BOT_Y - TOP_Y} rx={4} fill="var(--color-frame-dark)" />
-      {Array.from({ length: view.myOff }, (_, k) => (
+      {Array.from({ length: drawn.myOff }, (_, k) => (
         <rect
           key={`mo${k}`}
           x={TRAY_X + 14}
-          y={BOT_Y - 6 - (k + 1) * 12}
+          y={BOT_Y - 6 - (k + 1) * CHIP}
           width={TRAY_W - 28}
           height={10}
           rx={2}
@@ -290,11 +418,11 @@ export default function Board({ position, perspective, className }: BoardProps) 
           stroke={BLUE_DARK}
         />
       ))}
-      {Array.from({ length: view.theirOff }, (_, k) => (
+      {Array.from({ length: drawn.theirOff }, (_, k) => (
         <rect
           key={`to${k}`}
           x={TRAY_X + 14}
-          y={TOP_Y + 6 + k * 12}
+          y={TOP_Y + 6 + k * CHIP}
           width={TRAY_W - 28}
           height={10}
           rx={2}
@@ -302,33 +430,84 @@ export default function Board({ position, perspective, className }: BoardProps) 
           stroke={WHITE_DARK}
         />
       ))}
-      {view.myOff > 0 && (
-        <text x={TRAY_X + TRAY_W / 2} y={BOT_Y - 12 - view.myOff * 12} textAnchor="middle" fontSize={14} fill="#f3efe4">
-          {view.myOff} off
+      {drawn.myOff > 0 && (
+        <text x={TRAY_X + TRAY_W / 2} y={BOT_Y - 12 - drawn.myOff * CHIP} textAnchor="middle" fontSize={14} fill="#f3efe4">
+          {drawn.myOff} off
         </text>
       )}
-      {view.theirOff > 0 && (
-        <text x={TRAY_X + TRAY_W / 2} y={TOP_Y + 22 + view.theirOff * 12} textAnchor="middle" fontSize={14} fill="#f3efe4">
-          {view.theirOff} off
+      {drawn.theirOff > 0 && (
+        <text x={TRAY_X + TRAY_W / 2} y={TOP_Y + 22 + drawn.theirOff * CHIP} textAnchor="middle" fontSize={14} fill="#f3efe4">
+          {drawn.theirOff} off
         </text>
       )}
+
+      {/* the last move: a dot where each checker came from, a ring where it landed */}
+      {marks?.map((m, i) => {
+        const from = areaOf(m.side, m.from);
+        const fromTip = m.from === 25 || m.from === 0 ? from.y + from.h / 2 : from.y === TOP_Y ? TOP_Y + PH - 12 : BOT_Y - PH + 12;
+        const to = topSlot(view, m.side, m.to);
+        return (
+          <g key={`m${i}`} aria-hidden data-mark={`${m.side}:${m.from}/${m.to}`}>
+            <circle cx={from.x + from.w / 2} cy={fromTip} r={7} fill="var(--color-mark)" opacity={0.85} />
+            {m.to === 0 ? (
+              <rect x={TRAY_X + 11} y={to.cy - 7} width={TRAY_W - 22} height={14} rx={3} fill="none" stroke="var(--color-mark)" strokeWidth={3} />
+            ) : (
+              <circle cx={to.cx} cy={to.cy} r={R + 3} fill="none" stroke="var(--color-mark)" strokeWidth={4} />
+            )}
+          </g>
+        );
+      })}
 
       {/* cube */}
       <Cube y={cubeY} value={cubeValue} offered={position.cubeAction === "double"} />
 
-      {/* dice, for the player on roll */}
-      {position.dice && position.turn === me && (
+      {/* dice */}
+      {dice ? (
+        <g
+          data-dice
+          data-ready={dice.ready || undefined}
+          style={dice.onPress ? { cursor: "pointer" } : undefined}
+          onPointerDown={
+            dice.onPress
+              ? (e) => {
+                  e.stopPropagation();
+                  dice.onPress!();
+                }
+              : undefined
+          }
+        >
+          {dice.ready && (
+            <rect x={myDiceX - 100} y={MID_Y - 36} width={200} height={72} rx={12} fill="rgb(74 222 128 / 0.25)" stroke="#4ade80" strokeWidth={2} />
+          )}
+          <DiceRow values={dice.values} used={dice.used} cx={myDiceX} cy={MID_Y} rolling={rolling} />
+          {dice.ready && (
+            <text x={myDiceX} y={MID_Y + 52} textAnchor="middle" fontSize={13} fill="#f3efe4">
+              tap to play
+            </text>
+          )}
+        </g>
+      ) : openingDice ? (
         <>
-          <Die cx={RIGHT + 3 * PW - 30} cy={MID_Y} value={position.dice[0]} />
-          <Die cx={RIGHT + 3 * PW + 40} cy={MID_Y} value={position.dice[1]} />
+          <DiceRow values={[openingDice[0]]} cx={myDiceX} cy={MID_Y} rolling={rolling} />
+          <DiceRow values={[openingDice[1]]} cx={theirDiceX} cy={MID_Y} rolling={rolling} />
         </>
+      ) : (
+        position.dice && (
+          <DiceRow values={[position.dice[0], position.dice[1]]} cx={position.turn === me ? myDiceX : theirDiceX} cy={MID_Y} rolling={rolling} />
+        )
       )}
-      {position.dice && position.turn !== me && (
-        <>
-          <Die cx={LEFT + 3 * PW - 30} cy={MID_Y} value={position.dice[0]} />
-          <Die cx={LEFT + 3 * PW + 40} cy={MID_Y} value={position.dice[1]} />
-        </>
+
+      {/* point outlines for tests (data-point); input is hit-tested from the pointer's coordinates */}
+      {interactive && (
+        <g fill="transparent" pointerEvents="none">
+          {[...Array.from({ length: 24 }, (_, i) => i + 1), 25, 0].map((p) => {
+            const a = areaOf("me", p);
+            return <rect key={`h${p}`} x={a.x} y={a.y} width={a.w} height={a.h} data-point={p} />;
+          })}
+        </g>
       )}
+
+      <g pointerEvents="none">{overlay}</g>
 
       {/* footer */}
       <text x={8} y={H - 13} fontSize={18} fill="#333">

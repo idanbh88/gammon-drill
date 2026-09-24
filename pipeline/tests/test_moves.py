@@ -1,4 +1,4 @@
-from bgpipeline.moves import format_play, generate_plays, is_legal_play, parse_play
+from bgpipeline.moves import format_play, generate_plays, is_legal_play, legal_sequences, parse_play
 from bgpipeline.xgid import acting_view, parse_xgid, view_from_counts
 
 OPENING = "-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10"
@@ -18,6 +18,17 @@ def test_opening_31():
     assert not any("13/12" in n for n in ns)  # the 12 point is held
     assert all(len(p.steps) == 2 for p in generate_plays(view, (3, 1)))
     assert len(ns) == 16
+
+
+
+def test_legal_sequences_every_order():
+    # Mirrors "legalSequences" in src/lib/__tests__/move-input.test.ts.
+    view = acting_view(parse_xgid(OPENING))
+    seqs = legal_sequences(view, (3, 1))
+    assert all(len(steps) == 2 and len(used) == 2 for steps, used in seqs)
+    text = {" ".join(f"{st.src}/{st.dst}" for st in steps): used for steps, used in seqs}
+    assert text["8/5 6/5"] == [3, 1] and text["6/5 8/5"] == [1, 3]
+    assert len({p.result.key() for p in generate_plays(view, (3, 1))}) == 16
 
 
 def test_bar_first_and_no_entry():

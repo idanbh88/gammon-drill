@@ -2,7 +2,7 @@
  * Perspective helpers: everything the renderer and the move generator see goes through
  * `toPerspective`, which re-numbers the absolute XGID board from one player's point of view.
  */
-import { CHECKERS_PER_SIDE, P1_BAR, P2_BAR, type Player, type Position } from "./xgid";
+import { BOARD_LEN, CHECKERS_PER_SIDE, P1_BAR, P2_BAR, type Player, type Position } from "./xgid";
 
 export const BAR_POINT = 25;
 export const OFF_POINT = 0;
@@ -41,6 +41,29 @@ export function toPerspective(pos: Position, me: Player): PerspectiveView {
     theirBar = pos.board[P1_BAR];
   }
   return finishView(me, points, myBar, theirBar);
+}
+
+/**
+ * The position with the board replaced by `state` (a board state in `me`'s numbering, as
+ * produced by the move generator). Inverse of `toPerspective` + `stateFromView`; every other
+ * field of `pos` is kept.
+ */
+export function withState(
+  pos: Position,
+  me: Player,
+  state: { points: number[]; myBar: number; theirBar: number },
+): Position {
+  const board: number[] = new Array(BOARD_LEN).fill(0);
+  if (me === 1) {
+    for (let i = 1; i <= 24; i++) board[i] = state.points[i];
+    board[P1_BAR] = state.myBar;
+    board[P2_BAR] = 0 - state.theirBar;
+  } else {
+    for (let i = 1; i <= 24; i++) board[25 - i] = 0 - state.points[i];
+    board[P2_BAR] = 0 - state.myBar;
+    board[P1_BAR] = state.theirBar;
+  }
+  return { ...pos, board };
 }
 
 /** Build a view directly from counts (handy for tests and the pipeline). */

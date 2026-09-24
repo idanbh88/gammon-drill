@@ -8,10 +8,35 @@ import {
   scoreCaption,
   toPerspective,
   viewFromCounts,
+  withState,
 } from "@/lib/board";
-import { parseXgid } from "@/lib/xgid";
+import { applySteps, parsePlay, stateFromView } from "@/lib/moves";
+import { parseXgid, toXgid } from "@/lib/xgid";
 
 const OPENING = "-b----E-C---eE---c-e----B-:0:0:1:31:0:0:0:7:10";
+
+describe("withState", () => {
+  it.each([
+    OPENING,
+    "---BCCD-B-A--a-a-b-dcca---:0:0:1:00:2:1:0:7:10",
+    "-b---BD-C---dD---c-cba--AA:0:0:1:43:0:0:0:7:10",
+    "--ABCBB------------bcb-ba-:1:-1:-1:52:2:3:0:7:10",
+  ])("round-trips %s from both sides", (xgid) => {
+    const pos = parseXgid(xgid);
+    for (const me of [1, 2] as const) {
+      expect(toXgid(withState(pos, me, stateFromView(toPerspective(pos, me))))).toBe(xgid);
+    }
+  });
+
+  it("rebuilds the absolute board after a play from either side", () => {
+    const pos = parseXgid(OPENING);
+    const asOne = applySteps(stateFromView(toPerspective(pos, 1)), parsePlay("8/5 6/5"))!;
+    expect(toXgid(withState(pos, 1, asOne))).toBe("-b---BD-B---eE---c-e----B-:0:0:1:31:0:0:0:7:10");
+    const asTwo = applySteps(stateFromView(toPerspective(pos, 2)), parsePlay("8/5 6/5"))!;
+    expect(toXgid(withState(pos, 2, asTwo))).toBe("-b----E-C---eE---b-db---B-:0:0:1:31:0:0:0:7:10");
+    expect(pos.board[5]).toBe(0); // input not mutated
+  });
+});
 
 describe("pip counts", () => {
   it.each([

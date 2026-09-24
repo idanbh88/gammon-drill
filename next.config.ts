@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: fileURLToPath(new URL(".", import.meta.url)),
   },
+  // Routes read data/ at runtime, so the build's file tracing would list data/lessons/ (the
+  // imported lessons: ~400 MB of pictures, git-ignored). They are served from disk, never bundled.
+  outputFileTracingExcludes: {
+    "/*": ["data/lessons/**/*"],
+  },
 };
 
 export default nextConfig;

@@ -1,26 +1,23 @@
+import { lossClass } from "@/lib/matches";
 import type { Answer } from "@/types/problem";
 
 function fmtEquity(n: number): string {
   return (n < 0 ? "\u2212" : "+") + Math.abs(n).toFixed(3);
 }
 
-function lossClass(loss: number): string {
-  if (loss === 0) return "text-green-700";
-  if (loss < 0.02) return "text-lime-700";
-  if (loss < 0.08) return "text-amber-700";
-  return "text-red-700";
-}
-
 export default function AnswerReveal({
   answers,
   pickedId,
   offeredIds,
+  gameId,
 }: {
   /** Ranked best-first. */
   answers: Answer[];
   pickedId: string | null;
   /** Answers that were shown as buttons; the rest are listed muted. */
   offeredIds: string[];
+  /** For one of the user's own mistakes: what they played in the game. */
+  gameId?: string;
 }) {
   return (
     <ol className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" aria-label="Ranked answers">
@@ -40,6 +37,7 @@ export default function AnswerReveal({
               {a.label}
               {i === 0 && <span className="ml-2 text-xs font-sans text-green-700">best</span>}
               {mine && <span className="ml-2 rounded bg-blue-600 px-1.5 py-0.5 text-xs font-sans text-white">your pick</span>}
+              {a.id === gameId && <span className="ml-2 rounded bg-amber-500 px-1.5 py-0.5 text-xs font-sans text-white">in your game</span>}
             </span>
             <span className="font-mono text-sm text-stone-500" title="equity">
               {fmtEquity(a.equity)}

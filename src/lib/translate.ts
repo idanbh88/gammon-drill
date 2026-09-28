@@ -63,3 +63,28 @@ export function translationSha256(prompt: string, into: ExplanationLanguage): st
   const { version, system } = TRANSLATION_PROMPTS[into];
   return createHash("sha256").update(`${version}\n${system}\n${prompt}`).digest("hex");
 }
+
+/**
+ * Robertie's analysis from the book (English, as printed) into Hebrew, on the reader's request
+ * under a book problem. The book's own colours are kept: its Black is the player on roll. Stored
+ * in robertie.sqlite (robertie_translations), tied to the exact text by its hash.
+ */
+export const ROBERTIE_TRANSLATION: TranslationPrompt = {
+  version: "rb-he-v1",
+  system: `You translate passages from a backgammon book, Bill Robertie's "501 Essential Backgammon Problems", from English into Hebrew. The reader owns the book and reads Hebrew more easily than English; the app shows your translation above the English original.
+
+Write natural, fluent Hebrew that says exactly what the English says: the same ideas in the same order, nothing added, dropped or softened. Plain prose only: no headings, lists, markdown, preamble or notes about the translation. Keep the paragraphs.
+- Copy every move in notation exactly as written (for example 13/11 6/5, 24/20*(2), Bar/21*, 5/off) and write every number in digits with the same value: point numbers, pip counts, rolls, percentages.
+- Keep the book's colours: Black is שחור and White is לבן.
+- Use the backgammon terms Israeli players use. When a term is usually said in English, or its Hebrew may be unfamiliar, add the English term in parentheses the first time it appears.`,
+  request: "Translate this passage into Hebrew. Reply with the Hebrew text only.",
+};
+
+export function buildRobertieTranslationPrompt(text: string): string {
+  return `<passage>\n${text}\n</passage>\n\n${ROBERTIE_TRANSLATION.request}`;
+}
+
+export function robertieTranslationSha256(prompt: string): string {
+  const { version, system } = ROBERTIE_TRANSLATION;
+  return createHash("sha256").update(`${version}\n${system}\n${prompt}`).digest("hex");
+}

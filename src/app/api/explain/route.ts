@@ -8,8 +8,11 @@
  * `effort` (low / medium / high / xhigh / max) is sent as output_config.effort and recorded with
  * the explanation; without it the model's default level from explain-models.ts is used.
  *
- * `problemId` is a quiz problem id or a match decision id (match-<id>-g1-m7-checker, from the
- * store); for a decision the prompt also names the move that was played.
+ * `problemId` is a quiz problem id, a match decision id (match-<id>-g1-m7-checker, from the
+ * store) or a problem of Robertie's book (robertie-<n>); for a decision the prompt also names the
+ * move that was played, for a book problem the book's answer and gnubg's rating of it. A book
+ * problem's explanation is stored in data/robertie/robertie.sqlite (git-ignored, like everything
+ * from the book), every other one in data/store.sqlite.
  *
  * The explanation is written in Hebrew (EXPLANATION_LANGUAGE, recorded in the row).
  * `explanationMeta.id` is the new row; the panel then asks /api/explain/translate for its
@@ -34,6 +37,8 @@ import { auditExplanation } from "@/lib/explain-audit";
 import { explainModel, isExplainEffort, isExplainModel, suggestedModel } from "@/lib/explain-models";
 import { toMatchDecision } from "@/lib/matches";
 import { DATA_DIR, loadProblems } from "@/lib/problems";
+import { robertieNumber } from "@/lib/robertie";
+import { openRobertieStore, readRobertieProblem } from "@/lib/robertie-store";
 import { insertExplanation, openStore, readDecision, readLatestExplanations, storePath } from "@/lib/store";
 import type { ExplanationMeta, Problem } from "@/types/problem";
 
@@ -45,6 +50,13 @@ function bad(error: string, status = 400) {
 }
 
 async function findProblem(id: string): Promise<{ problem: Problem; opts: PromptOptions } | undefined> {
+  if (robertieNumber(id) !== null) {
+    const problem = readRobertieProblem(DATA_DIR, id);
+    if (!problem?.book) return undefined;
+    const b = problem.book;
+    const label = problem.answers.find((a) => a.id === b.answerId)?.label ?? b.answerId;
+    return { problem, opts: { book: { number: b.number, chapterTitle: b.chapterTitle, label, equityLoss: b.loss, plies: b.plies } } };
+  }
   const quiz = (await loadProblems()).find((p) => p.id === id);
   if (quiz) return { problem: quiz, opts: {} };
   const row = readDecision(DATA_DIR, id);
@@ -95,7 +107,7 @@ export async function POST(req: Request) {
   if (!explanation) return bad("The model returned no text.", 502);
 
   const generatedAt = new Date().toISOString();
-  const db = openStore(storePath(DATA_DIR));
+  const db = problem.book ? openRobertieStore(DATA_DIR) : openStore(storePath(DATA_DIR));
   let id: number;
   try {
     id = insertExplanation(db, {

@@ -30,3 +30,7 @@ pipeline/uv.lock.bak
 # Backgammon Galaxy lessons: Galaxy's material (the exports, their pictures and lessons.sqlite)
 # stays on this machine; see docs/SPEC.md § 5 Lesson store
 data/lessons/
+
+# Robertie's "501 Essential Backgammon Problems": everything read from the book (page scans, crops,
+# transcriptions, positions, robertie.sqlite) stays on this machine; see docs/SPEC.md § 5 Robertie store
+data/robertie/

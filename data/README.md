@@ -5,7 +5,10 @@ Drop in another file to add problems; ids must be unique across all files. `stor
 problem set: it holds the explanations generated from the app and the imported matches (see
 below). `matches/` keeps the uploaded `.mat` files as received. `lessons/` (git-ignored) holds
 the imported Backgammon Galaxy lessons; never put a Galaxy quiz export in this folder itself,
-the loader would read it as a problem set and fail.
+the loader would read it as a problem set and fail. `robertie/` (git-ignored) holds Bill
+Robertie's *501 Essential Backgammon Problems* read from the user's scan
+(`pipeline/import_robertie.py`): the book is copyrighted, so nothing from it, not even a
+position with its problem number, may be written to a committed file.
 
 ```jsonc
 {

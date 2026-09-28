@@ -147,6 +147,34 @@ or changed ones. Rows are written only when every picture is on disk. Everything
 `data/lessons/` is git-ignored. Exit codes: 4 a file could not be read or is not a quiz, 5 store
 error, 6 a picture could not be downloaded.
 
+## import_robertie.py: Robertie's 501 Essential Backgammon Problems
+
+```bash
+uv run import_robertie.py "C:\Users\<me>\Downloads\<scan>.pdf"                 # the free stages; says what Claude would cost
+uv run import_robertie.py "<scan>.pdf" --spend --only s011-R,s003-L-1              # a few Claude readings, directly
+uv run import_robertie.py "<scan>.pdf" --spend                                     # every missing Claude reading, directly, 4 at a time
+uv run import_robertie.py "<scan>.pdf" --spend --batch                             # the same through the batch API (half price, can sit for hours)
+uv run import_robertie.py "<scan>.pdf" --stages assemble,gnubg,store,report        # after editing ../data/robertie/fixes.json
+```
+
+Reads the user's scan of the book (one JPEG per PDF page, two book pages lying on their side)
+into `../data/robertie/`, git-ignored because the book is copyrighted. Stages: `pages`
+(`bgpipeline/pdf_pages.py`), `diagrams` (every board cropped), `claude`
+(`bgpipeline/claude_pages.py`: Claude reads each page's captions and solutions, and counts each
+enlarged diagram again; paid, so it runs only with `--spend`, and every answer is cached under
+`claude/`, batches journalled in `claude/batches.jsonl`; the first import of the whole book cost
+about $15, mostly through the batch API), `local` (`bgpipeline/board_reader.py`, OpenCV: frame and bar from the long lines,
+13 columns, black checkers by their fill, white ones by their outline), `assemble`
+(`bgpipeline/robertie.py`: both readings must agree, 15 checkers a side, the book's play legal;
+`fixes.json` can give a position (`{"12": {"xgid": "...", "note": "..."}}`), pick one reading
+(`"accept": "local"`, optionally with points set by hand: `"set": {"white": {"23": 1}}`), give
+the play or cube verdict when the prose states it only in words, correct the dice, or exclude a
+problem; a solution running over a page break is joined unless the next page opens a chapter),
+`gnubg` (every play at the full 2-ply, `bgpipeline/book_score.py` scores the book's answer,
+losses of 0.02 or more again at 3-ply), `store` (`robertie.sqlite`; the app's own tables in it
+are kept) and `report` (`report.json`). Exit codes: 2 no gnubg, 3 gnubg failed, 4 the PDF could
+not be read, 5 store error, 6 Claude error.
+
 ## import_forum.py: positions from forum threads
 
 ```bash
@@ -162,7 +190,7 @@ position, most-liked first, as raw material for explanations.
 ## Layout
 
 ```
-analyze.py / classify.py / import_forum.py / import_match.py / import_lessons.py   command-line entry points
+analyze.py / classify.py / import_forum.py / import_match.py / import_lessons.py / import_robertie.py   command-line entry points
 bgpipeline/cli.py         expand_paths (files, folders, globs), ImportError_, NDJSON emit: shared by the importers
 bgpipeline/xgid.py        XGID parse/format, perspective views + with_state (mirrors src/lib in the app)
 bgpipeline/moves.py       legal-play generator + notation (mirrors src/lib/moves.ts)

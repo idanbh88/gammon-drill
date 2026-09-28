@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ProblemSetSchema, type Problem, type ProblemSet } from "@/types/problem";
 import { ERROR_THRESHOLD } from "./matches";
+import { readRobertieProblems } from "./robertie-store";
 import { applyStore, readLatestExplanations, readMistakeProblems } from "./store";
 import { validateProblem } from "./validate";
 
@@ -57,14 +58,15 @@ export async function loadProblems(dir: string = DATA_DIR): Promise<Problem[]> {
 }
 
 /**
- * What the quiz draws from: every problem set, plus the user's own mistakes from the store
- * (games against gnubg and imported matches; see mistakes.ts). A mistake that fails validation
- * or repeats an id is left out rather than breaking the quiz.
+ * What the quiz draws from: every problem set, the user's own mistakes from the store (games
+ * against gnubg and imported matches; see mistakes.ts) and the problems of Robertie's book when
+ * it has been imported (data/robertie/, robertie-store.ts). A mistake or book problem that fails
+ * validation or repeats an id is left out rather than breaking the quiz.
  */
 export async function loadQuizProblems(dir: string = DATA_DIR): Promise<Problem[]> {
   const problems = await loadProblems(dir);
   const ids = new Set(problems.map((p) => p.id));
-  for (const p of readMistakeProblems(dir, ERROR_THRESHOLD)) {
+  for (const p of [...readMistakeProblems(dir, ERROR_THRESHOLD), ...readRobertieProblems(dir)]) {
     if (ids.has(p.id) || validateProblem(p).length > 0) continue;
     ids.add(p.id);
     problems.push(p);

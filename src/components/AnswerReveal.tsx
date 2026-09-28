@@ -10,6 +10,7 @@ export default function AnswerReveal({
   pickedId,
   offeredIds,
   gameId,
+  bookId,
 }: {
   /** Ranked best-first. */
   answers: Answer[];
@@ -18,6 +19,8 @@ export default function AnswerReveal({
   offeredIds: string[];
   /** For one of the user's own mistakes: what they played in the game. */
   gameId?: string;
+  /** For a problem of Robertie's book: the book's answer. */
+  bookId?: string;
 }) {
   return (
     <ol className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" aria-label="Ranked answers">
@@ -38,6 +41,7 @@ export default function AnswerReveal({
               {i === 0 && <span className="ml-2 text-xs font-sans text-green-700">best</span>}
               {mine && <span className="ml-2 rounded bg-blue-600 px-1.5 py-0.5 text-xs font-sans text-white">your pick</span>}
               {a.id === gameId && <span className="ml-2 rounded bg-amber-500 px-1.5 py-0.5 text-xs font-sans text-white">in your game</span>}
+              {a.id === bookId && <span className="ml-2 rounded bg-violet-600 px-1.5 py-0.5 text-xs font-sans text-white">Robertie</span>}
             </span>
             <span className="font-mono text-sm text-stone-500" title="equity">
               {fmtEquity(a.equity)}

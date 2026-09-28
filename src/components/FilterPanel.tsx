@@ -82,6 +82,7 @@ export default function FilterPanel({
             <Chip key={s} on={filters.source === s} onClick={() => onChange({ ...filters, source: s })}>
               {SOURCE_LABEL[s]}
               {s === "mistakes" && <span className="opacity-60"> {problems.filter((p) => p.origin).length}</span>}
+              {s === "book" && <span className="opacity-60"> {problems.filter((p) => p.book).length}</span>}
             </Chip>
           ))}
         </div>

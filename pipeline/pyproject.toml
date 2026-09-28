@@ -7,6 +7,8 @@ dependencies = []
 
 [project.optional-dependencies]
 forum = ["requests>=2.32", "beautifulsoup4>=4.12"]
+# import_robertie.py: page images out of the PDF, the local board reader, Claude's page reading
+book = ["pypdf>=5", "numpy>=1.26", "opencv-python-headless>=4.9", "anthropic>=1,<2"]
 
 [dependency-groups]
 dev = ["pytest>=8"]

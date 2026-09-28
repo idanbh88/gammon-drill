@@ -62,6 +62,17 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("engine position class: race");
   });
 
+  it("names the book's answer and gnubg's verdict for a problem of Robertie's book", () => {
+    const plain = buildPrompt(byId["seed-001"]);
+    const differs = buildPrompt(byId["seed-001"], { book: { number: 12, chapterTitle: "The Opening", label: "24/23 13/10", equityLoss: 0.231, plies: 3 } });
+    expect(differs).toContain("problem 12 of Bill Robertie's book");
+    expect(differs).toContain("The book recommends 24/23 13/10, which GNU Backgammon rates 0.231 worse than its best play at 3-ply");
+    expect(differs.endsWith("Write the explanation now, in Hebrew.")).toBe(true);
+    const agrees = buildPrompt(byId["seed-001"], { book: { number: 12, chapterTitle: "The Opening", label: "8/5 6/5", equityLoss: 0, plies: 2 } });
+    expect(agrees).toContain("which is also GNU Backgammon's best play at 2-ply");
+    expect(plain).not.toContain("Robertie");
+  });
+
   it("names the played move when the reader reviews their own match", () => {
     const plain = buildPrompt(byId["seed-001"]);
     expect(plain).not.toContain("reviewing a match");
@@ -79,7 +90,7 @@ describe("buildPrompt", () => {
     expect(a).toMatch(/^[0-9a-f]{64}$/);
     expect(promptSha256(buildPrompt(byId["seed-001"]))).toBe(a);
     expect(promptSha256(buildPrompt(byId["seed-002"]))).not.toBe(a);
-    expect(PROMPT_VERSION).toBe("v4");
+    expect(PROMPT_VERSION).toBe("v5");
     expect(SYSTEM_PROMPT).toContain("3 to 5 sentences");
   });
 

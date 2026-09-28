@@ -3,7 +3,9 @@
  * position from Blue's side, the question, the ranked answers with equities / losses /
  * probabilities and the classifier's features. The data and the instructions are in English;
  * the model writes the explanation in Hebrew, the language the user reads most easily (prompt
- * v4; v1 to v3 asked for English, and those texts were translated into Hebrew afterwards).
+ * v4 on; v1 to v3 asked for English, and those texts were translated into Hebrew afterwards).
+ * v5 adds, for a problem of Robertie's book, the book's answer and gnubg's verdict on it; the
+ * prompt for every other problem is the same as in v4.
  * Server-only (used by the /api/explain route).
  *
  * Bump PROMPT_VERSION when SYSTEM_PROMPT or the prompt layout changes; every stored explanation
@@ -15,7 +17,7 @@ import { actingView, questionText } from "./board";
 import { stripInvisibleMarks } from "./rtl";
 import { parseXgid, type Position } from "./xgid";
 
-export const PROMPT_VERSION = "v4";
+export const PROMPT_VERSION = "v5";
 
 /** The language SYSTEM_PROMPT asks for, recorded with every explanation; the panel then asks for an English translation. */
 export const EXPLANATION_LANGUAGE: ExplanationLanguage = "he";
@@ -123,6 +125,16 @@ export function describeFeatures(problem: Problem): string {
 export interface PromptOptions {
   /** Set when the reader is reviewing a move from their own match: the answer they played. */
   played?: { label: string; equityLoss: number };
+  /** Set for a problem of Robertie's book: the book's answer and gnubg's rating of it. */
+  book?: { number: number; chapterTitle: string; label: string; equityLoss: number; plies: number };
+}
+
+export function describeBook(book: NonNullable<PromptOptions["book"]>): string {
+  const verdict =
+    book.equityLoss > 0
+      ? `which GNU Backgammon rates ${book.equityLoss.toFixed(3)} worse than its best play at ${book.plies}-ply. Say what the book's play aims for, why the engine prefers its own play, and how big the difference is in practice`
+      : `which is also GNU Backgammon's best play at ${book.plies}-ply. Say why the book and the engine agree`;
+  return `This position is problem ${book.number} of Bill Robertie's book "501 Essential Backgammon Problems" (chapter "${book.chapterTitle}"; the book's Black is Blue here, with the same point numbers). The book recommends ${book.label}, ${verdict}.`;
 }
 
 export function describePlayed(played: { label: string; equityLoss: number }): string {
@@ -148,6 +160,7 @@ export function buildPrompt(problem: Problem, opts: PromptOptions = {}): string 
   const feats = describeFeatures(problem);
   if (feats) sections.push(`Board features: ${feats}.`);
   if (opts.played) sections.push(describePlayed(opts.played));
+  if (opts.book) sections.push(describeBook(opts.book));
   sections.push("Write the explanation now, in Hebrew.");
   return sections.join("\n\n");
 }

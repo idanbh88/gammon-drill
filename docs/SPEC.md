@@ -30,6 +30,7 @@ the offline pipeline; GNU Backgammon 1.08 as the engine.
 | 5 | lessons: import Backgammon Galaxy quiz sets (picture-based multiple choice) with all their pictures, play each set in order with the author's analysis, score and retry mistakes | done 2026-09-11 (§ 5 lesson store, § 6 Lessons, § 8 `import_lessons.py`); 24 sets, 423 problems imported; the positions are pictures only (§ 9 item 9) |
 | 6 | play gnubg: matches or money sessions against gnubg at 2-ply (best move, with the cube), click-to-move board, gnubg's verdict after every decision, PR for both sides, every error automatically in the quiz ("My mistakes") with the move played always offered | done 2026-09-24 (§ 5 play store, PR, mistakes; § 6 Play; § 8 `gnubg_server.py`) |
 | 7 | study extras chosen 2026-09-24: where I lose equity (PR trend, loss by category / cube error), try again before the answer, play on from any position | planned (§ 9 items 11–13) |
+| 8 | Robertie 501: the user's scan of Bill Robertie's *501 Essential Backgammon Problems* read into positions (a local board reader and Claude's reading of every enlarged diagram must agree; Claude transcribes the captions and solutions), every answer of the book scored by gnubg (2-ply with every play at full depth, disagreements again at 3-ply), a `/robertie` section (chapters, a chapter player in book order, the disagreements, a readings check) and the problems in the quiz | built 2026-09-28, ahead of phase 7 at the user's request. The first import put 500 of the 501 problems in the app (454 read alike by both readers, 46 fixed by hand; one left out: its solution names no play); gnubg agrees with the book on 400, differs by less than 0.02 on 59, by 0.02–0.08 on 31 and by more on 10 (§ 5 Robertie store, § 6 Robertie, § 7, § 8 `import_robertie.py`) |
 
 Open items are listed in § 9.
 
@@ -270,6 +271,51 @@ written through a temporary file. Rows are written only when every picture of th
 disk. Re-importing with `--replace` deletes and rewrites one set's rows (the only delete in this
 database) and reuses the pictures that still match their row.
 
+### Robertie store
+
+Bill Robertie's *501 Essential Backgammon Problems*, read from the user's scan (a PDF of page
+images: two book pages per PDF page, lying on their side, no text layer) by
+`pipeline/import_robertie.py` into `data/robertie/robertie.sqlite` (schema in
+`src/lib/robertie-store-schema.ts`, its own `meta.schema_version` = 1, read by Python the same
+way as the main schema). Everything under `data/robertie/` is git-ignored: the database, the
+book pages (`pages/s<NNN>-<L|R>.jpg`), the diagram crops (`diagrams/<page>-<n>.png`), Claude's
+cached readings (`claude/page/`, `claude/board/`, `claude/batches.jsonl`), the local readings,
+gnubg's raw output (`gnubg/<plies>-ply.json`) and the hand-written `fixes.json`. The repository
+is public and the book is copyrighted: nothing read from it, not a position with its number,
+goes into `data/store.sqlite`, `data/*.json` or a test fixture.
+
+- Importer tables (a re-import rewrites them): `robertie_source` (file name and SHA-256, pages),
+  `robertie_chapters` (number, title as printed, first and last problem, the app's categories
+  for it, § 7), `robertie_problems` (number, `problem_id` = `robertie-<n>` (the quiz id),
+  chapter, kind, caption, dice, pages, diagram, Robertie's solution text and its SHA-256, his
+  play as printed, his cube verdict, the answer normalised to the app's notation or joint cube
+  id, the reading's status `ok` / `fixed` / `check` with its issues, both readings, the fix
+  applied, the XGID), `robertie_analyses` (one row per problem and depth: gnubg's ranked
+  answers with the book's answer among them, its loss, whether it was evaluated at full depth,
+  categories, features).
+- App tables (the importer never touches them): `explanations` and `translations`, exact copies
+  of `store.sqlite`'s (a test keeps them equal), for book problems' explanations, which never go
+  into the committed store; `robertie_translations` (Robertie's text into Hebrew, appended, tied
+  to the text by its SHA-256 so a re-read text never shows an old translation);
+  `robertie_reports` (a board reported as misread; `resolved_at` once dealt with).
+
+The position is built the way the book draws it: Black, always the player on roll, is player 1
+(uppercase), in Black's point numbers, which are the app's Blue numbers. Money play without the
+Jacoby rule (a chapter is about positions too good to double, which the Jacoby rule rules out)
+and without beavers. The cube box carries no number: centred means a 1-cube, by Black's side a
+2-cube Black owns, by White's side one White owns (for money play only the owner matters).
+
+A problem is `ok` only when both readings of its diagram agree point by point (bars, borne-off
+tray and the cube's side too), each side has 15 checkers (the tray is drawn), the book's play is
+legal with the stated dice (judged by resulting position), a cube problem has a verdict, and the
+caption agrees (on the bar, opening roll). `fixed` means `fixes.json` gave the position (or chose
+one reading, set a few points by hand, or gave the play or verdict the prose states in words)
+and the checks passed; `exclude` keeps a problem out (its status stays `check`). Only `ok` and
+`fixed` problems that gnubg scored reach the app, minus those reported as misread and not
+resolved. A solution that runs over a page break is joined: text at the top of a page continues
+the last solution of the page before when that page was read and ended in a solution, unless the
+page opens a chapter (its text is then the chapter's introduction).
+
 ### Difficulty
 
 Derived, never stored: the equity gap between the best and the second-best answer
@@ -343,7 +389,7 @@ the quiz offers the top four in random order.
   played in the game ("in your game"), a line says where it was played and what it cost, and a
   button takes it out of the quiz (or puts it back).
 - **Filters and order** (panel above the board, both remembered in `localStorage`): source
-  (all, problem sets, my mistakes), mistakes (All, "Errors only": the move played lost 0.02 to
+  (all, problem sets, my mistakes, Robertie 501; "problem sets" leaves out both other sources), mistakes (All, "Errors only": the move played lost 0.02 to
   0.08, or "Blunders only": 0.08 or more; one at a time, and choosing a size leaves only the
   user's own mistakes of that size, named on the collapsed panel too), progress (All, or "Not
   tried yet": only problems never answered in this browser's attempt log, so each one answered
@@ -428,11 +474,37 @@ the quiz offers the top four in random order.
   of numbers shows each problem's status (right, wrong, fixed, not answered); an answered one
   opens for review (nothing recorded), an unanswered one is played next. The end of a run shows
   the score, the mistakes, "Retry my mistakes" and "Start over".
+- **Robertie** (`/robertie`): the chapters of Robertie's book that have problems (26; the last
+  chapter has none), with their problem range, checker
+  and cube counts, how many are ready to play or still wait for a look at their board, how gnubg
+  rates the book's answers (agrees, small difference under 0.02, disagrees 0.02–0.08, strongly
+  0.08 or more: the app's error and blunder lines) and this browser's progress in each chapter's
+  run; a readings summary with a link to the check page; "Where gnubg disagrees with the book",
+  largest loss first, collapsed because it shows the answers. A chapter
+  (`/robertie/chapter/<n>`, `?n=<number>` opens one problem) plays in book order with the quiz's
+  problem card (`ProblemCard`, shared with the quiz): a strip of problem numbers with each one's
+  status, the answer buttons in a fixed order per problem with the book's answer always among
+  them, and after answering the verdict (gnubg judges; a line under it says how the book's answer
+  compares, with its mark), gnubg's ranking with the book's answer tagged "Robertie", Robertie's
+  analysis (fetched from `GET /api/robertie/text/<n>` when the card appears: his text as printed,
+  links to the book page and the diagram scan (`/api/robertie/images/<diagram|page>/<file>`, only
+  names the importer writes), "Translate to Hebrew" (`POST /api/robertie/translate`, prompt
+  `rb-he-v1`, effort low, only on request; shown right to left above the English) and the
+  explanation panel, whose prompt (v5) names the book's answer and gnubg's rating of it. The end
+  of a run shows the score, the mistakes, "Retry my mistakes" and "Start over". Answers go into
+  the quiz's attempt log, so review scheduling and `/stats` count them; the quiz offers the book's
+  problems under the source "Robertie 501". The check page (`/robertie/check`) shows each diagram
+  scan beside the board the app built from it, with the issues, the fix note and a "Reading looks
+  wrong" button (`POST /api/robertie/reports`): only those needing a look by default, `?show=all`
+  for all, `?chapter=N`, and `?mirror=1` to flip the scans (the book draws Black's home board
+  bottom left, the app bottom right).
 - **Storage**: `bg-trainer/attempts/v1` holds `{ problemId, answerId, equityLoss, correct, at }`
   entries (a mistake's problem id is its decision id); `bg-trainer/play/v1` holds the play
   screen's animation speed; `bg-trainer/filters/v4` holds the filters
   (v3 had no progress, v2 no mistake size either, v1 no source either; the newest older one is
-  carried over on first load); `bg-trainer/quiz-order/v1` holds `{ newFirst, random }`; `bg-trainer/lessons/v1` holds
+  carried over on first load); `bg-trainer/quiz-order/v1` holds `{ newFirst, random }`; `bg-trainer/robertie/v1` holds
+  `{ runs: { <chapter>: <start of the current run> } }` (a chapter's progress is the first answer
+  to each problem since then in the attempt log; a later right answer marks it fixed); `bg-trainer/lessons/v1` holds
   `{ attempts: [{ setKey, problemId, choiceId, correct, loss, retry, at }], runs: { <quiz id>:
   <start of the current run> } }`. A lesson score counts the first answer to each problem in the
   current run; answers in a "retry my mistakes" round (`retry`) can mark a mistake fixed but do
@@ -444,6 +516,15 @@ the quiz offers the top four in random order.
 Taxonomy (Robertie's chapters): `opening`, `early-game`, `blitz`, `holding-game`,
 `priming-game`, `back-game`, `connectivity`, `hit-or-not`, `breaking-anchor`, `crunch`,
 `bearing-in`, `bearing-off`, `racing-cube`, `contact-cube`, `containment`, `ace-point-game`.
+
+Robertie's problems carry their chapter's category (`CHAPTER_CATEGORIES` in
+`bgpipeline/robertie.py`: The Opening `opening`; Flexibility and The 5-Point `early-game`; The
+Blitz, Late-Game Blitz and Post-Blitz `blitz`; Holding Games; Priming Games; Connectivity; Hit
+or Not?; Breaking Anchor; Crunch Positions `crunch`; Action Doubles and Too Good to Double?
+`contact-cube`; Ace-Point Games and Post-Ace-Point Games `ace-point-game`; Back Games; The
+Containment Game; Bearing Off Against Contact and The Bearoff `bearing-off`) plus the
+classifier's tags; The Middle Game, One Man Back, the two gammon chapters, Various Endings and
+The Race have no category of their own.
 
 `pipeline/bgpipeline/features.py` computes, from Blue's side: contact, gnubg position class,
 pips and pip difference, checkers back and on the bar, anchors in each home board, home-board
@@ -507,6 +588,29 @@ rules; a problem can carry several tags and always gets at least one. The featur
   `done`, `error`). Exit codes: 4 a file could not be read or is not a quiz, 5 store error
   (including a problem already in another set), 6 a picture could not be downloaded. The first
   24 sets (1,494 pictures) took 45 s.
+- **import_robertie.py**: Robertie's book from the user's scan, in stages that each reuse what
+  earlier runs left in `data/robertie/`: `pages` (each PDF page's JPEG taken as stored with
+  pypdf, turned by its `/Rotate`, cut at the spine's shadow, lighting evened out), `diagrams`
+  (boards found as board-sized ink components, cropped with room for the tray and the cube),
+  `claude` (paid, only with `--spend`: Claude, `claude-opus-5`, reads every page (captions,
+  solutions, Robertie's play or cube verdict as printed; effort low) and every diagram enlarged
+  twice (a second, independent count; effort medium), structured JSON output, answers cached so
+  nothing is paid twice; `--batch` goes through the Message Batches API at half price in batches
+  of 10, journalled in `claude/batches.jsonl`, and without it the requests go directly, four at a
+  time, each answer cached as it arrives), `local` (`bgpipeline/board_reader.py`: the board
+  straightened by a projection search, frame and bar found as the only long straight lines,
+  13 equal columns, checkers 1/11 of the frame's height; a black checker is a dark interior, a
+  white one an ellipse outline matched by normalised correlation, the half facing the board's
+  middle included; a faintly printed frame that falls apart is found again after closing small
+  gaps), `assemble` (`bgpipeline/robertie.py`: captions paired with diagrams, solutions
+  joined across pages, the checks of § 5 Robertie store, `fixes.json`), `gnubg` (`run_gnubg(...,
+  full_width=True)`: every play evaluated at the full 2-ply, so the book's play and gnubg's best
+  are compared at the same depth; `bgpipeline/book_score.py` scores the book's play like a played
+  match move and a cube verdict as that joint answer's loss; loss 0.02 or more is analysed again
+  at `--recheck-plies` 3; raw output cached per depth), `store`, `report` (`report.json`: statuses,
+  marks, the largest disagreements, what needs a look). The tests draw synthetic diagrams in the
+  book's style (`tests/render_book_board.py`); nothing from the book is committed. Exit codes: 2 no
+  gnubg, 3 gnubg failed, 4 the PDF could not be read, 5 store error, 6 Claude error.
 - **gnubg_server.py** (the app's live engine, not a command): runs inside one long-lived
   `gnubg-cli -t -q -p` that `src/lib/engine.ts` starts on first use (the script is copied to an
   ASCII folder, the pipeline is imported from `BG_PIPELINE_DIR`). One JSON request per stdin line
@@ -593,8 +697,10 @@ without further briefing. The original brief is in `docs/BRIEF.md`.
    `.mat` export of games against gnubg for rollouts in gnubg or XG; the batch runner could use
    `cfevaluate` too and drop its text pass for cube decisions.
 
-Known gaps: `import_forum.py` has not been tried on a live forum; Robertie's own positions are
-copyrighted, so sets must come from own play, forums, or engine-found positions. The Galaxy
+Known gaps: `import_forum.py` has not been tried on a live forum. Robertie's book is copyrighted:
+it is read from the user's own scan into the git-ignored `data/robertie/` only (§ 5 Robertie
+store), and a committed problem set must still come from own play, forums or engine-found
+positions. The Galaxy
 lessons are licensed material for the user's own study: they stay in the git-ignored
 `data/lessons/` and must never be committed (a Galaxy export placed in `data/` itself would
 also break the quiz loader, which reads every top-level `data/*.json` as a problem set).
@@ -664,3 +770,12 @@ also break the quiz loader, which reads every top-level `data/*.json` as a probl
 | 2026-09-24 | Every explanation is shown in English with a Hebrew translation under it: a second request right after a new explanation (same model as picked, effort `low`), older ones from a "Translate to Hebrew" button; translations are appended to their own table `translations`, keyed by the explanation row (schema v5) | asked by the user, who reads Hebrew more easily; translating the stored English keeps the English prompt, its audit and every earlier text as they were, works for the explanations already stored, and a failed translation never loses the explanation; nothing is generated on page load, as for explanations |
 | 2026-09-24 | The Hebrew is drawn right to left with moves and signed numbers isolated left to right (`rtl.ts`), and checked against the English for numbers and moves | the Unicode bidi algorithm scrambles notation inside Hebrew ("*21/bar"); a translation that changes a number would mislead exactly where the user relies on it |
 | 2026-09-27 | Explanations are written in Hebrew by the model (prompt v4) and translated into English (`en-v1`); `explanations.language` records the language (schema v6, NULL = the older English rows, which keep their Hebrew translations); the panel shows the Hebrew on top either way | asked by the user: the Hebrew translations read oddly ("הבר (bar)"), and written directly in Hebrew the model phrases it as a coach would; the audit works on the Hebrew as it did on the English (notation and digits are kept), the English stays as a checked reference, and old rows need no migration |
+| 2026-09-28 | Robertie's book is read from the user's scan into the git-ignored `data/robertie/`, with its own database; book problems' explanations and translations are stored there too, never in `store.sqlite` | asked by the user; the repository is public and the book is copyrighted, like the Galaxy lessons; an explanation keyed by a numbered book position would publish the book piece by piece |
+| 2026-09-28 | Two independent readings of every diagram must agree: a local OpenCV reader and Claude's count of the diagram enlarged twice; Claude also transcribes captions and solutions (the pipeline's only Claude call; explanations stay on the app's button) | chosen by the user; a test showed Claude undercounts stacks at page resolution but counts an enlarged diagram right, and the local reader alone got 97% of the boards to 15 checkers a side; where the two differ a person looks (`fixes.json`) |
+| 2026-09-28 | gnubg judges the book's problems like every other; the book's answer is always offered, tagged "Robertie" and marked same / close / differs / blunder with the app's 0.02 / 0.08 lines | chosen by the user; one standard across the app, and the differences are the point of the comparison |
+| 2026-09-28 | The book's positions are money play without the Jacoby rule; an owned cube is a 2-cube | no caption gives a score; a chapter discusses positions too good to double, which the Jacoby rule rules out; the diagrams print no cube value and for money play only the owner matters |
+| 2026-09-28 | Book problems are analysed at 2-ply with every play at full depth (`full_width`), disagreements again at 3-ply | gnubg's default filter leaves plays outside its top 14 at 1-ply, which would compare the book's play at a lower depth than gnubg's best |
+| 2026-09-28 | The pipeline calls the Anthropic API (to read the book), only with `--spend` and once per item | the 2026-09-03 rule kept Claude out of the pipeline for explanations; reading a scan is a one-time import step, cached so nothing is paid twice |
+| 2026-09-28 | Claude's readings go directly (four at a time) unless `--batch` is given; batches are sent 10 requests at a time | on 2026-09-28 the batch API showed 840 and later 80 requests "in progress, 0 done" for hours (cancelling returned the finished ones); the last 67 went directly in about ten minutes for $2.37 |
+| 2026-09-28 | Text at the top of a page joins the solution before it whenever the page before was read and ended in a solution, not only when Claude marked it as running on | the reading's `continues_on_next_page` missed two real run-ons (the endings of problems 234 and 445); after an unread page or on a chapter's first page the text is not joined |
+| 2026-09-28 | A book problem whose solution names no play (it only rejects one) is left out rather than given an answer | the app tags the book's answer and marks gnubg's verdict on it; an answer the book does not give would put words in Robertie's mouth |

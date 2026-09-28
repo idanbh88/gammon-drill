@@ -366,9 +366,13 @@ export function applyStore(problems: Problem[], latest: Map<string, StoredExplan
 // ---------------------------------------------------------------------------
 // Translations (schema v5): the explanation in the other language, appended like explanations
 
-/** The translations table exists from schema version 5 on. */
+/**
+ * Whether the file has a translations table: store.sqlite from schema version 5 on (an older
+ * file opened read-only has none), robertie.sqlite always (its own version numbers are unrelated,
+ * so this looks at the table itself).
+ */
 export function hasTranslations(db: DatabaseSync): boolean {
-  return schemaVersion(db) >= 5;
+  return db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'translations'").get() !== undefined;
 }
 
 const TRANSLATION_COLUMNS =

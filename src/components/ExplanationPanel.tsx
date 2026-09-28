@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import {
   translationLanguage,
   type ExplanationLanguage,
@@ -19,7 +19,7 @@ import {
   type ExplainEffort,
   type ExplainModelId,
 } from "@/lib/explain-models";
-import { ltrRuns } from "@/lib/rtl";
+import HebrewText from "./HebrewText";
 
 const EFFORT_LABEL: Record<ExplainEffort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" };
 const LANGUAGE_NAME: Record<ExplanationLanguage, string> = { he: "Hebrew", en: "English" };
@@ -35,23 +35,6 @@ async function postJson<T>(url: string, body: object): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
   return data;
-}
-
-/** Hebrew prose, right to left, with moves and signed numbers kept left to right (see rtl.ts). */
-function HebrewText({ text }: { text: string }) {
-  return (
-    <p dir="rtl" lang="he" className="whitespace-pre-line text-stone-800">
-      {ltrRuns(text).map((run, i) =>
-        run.ltr ? (
-          <bdi key={i} dir="ltr">
-            {run.text}
-          </bdi>
-        ) : (
-          <Fragment key={i}>{run.text}</Fragment>
-        ),
-      )}
-    </p>
-  );
 }
 
 function Prose({ language, text }: { language: ExplanationLanguage; text: string }) {
@@ -105,7 +88,8 @@ export default function ExplanationPanel({ problem, onGenerated }: Props) {
     setError(null);
     try {
       // The server picks the direction from the explanation's language; `into` only names it here.
-      const data = await postJson<{ translation?: ExplanationTranslation }>("/api/explain/translate", { explanationId: id, model });
+      // problemId picks the database: a book problem's explanations live in robertie.sqlite.
+      const data = await postJson<{ translation?: ExplanationTranslation }>("/api/explain/translate", { explanationId: id, model, problemId: problem.id });
       if (!data.translation) throw new Error("the response had no text");
       onGenerated(problem.id, { explanationTranslation: data.translation });
     } catch (e) {

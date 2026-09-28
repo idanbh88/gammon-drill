@@ -2,20 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Answer, ExplanationPatch, Problem } from "@/types/problem";
-import { questionText } from "@/lib/board";
-import { applyFilters, attemptedIds, difficultyBand, DEFAULT_FILTERS, loadFilters, saveFilters, type Filters } from "@/lib/filters";
-import { difficulty, offeredAnswers } from "@/lib/problem-utils";
+import { applyFilters, attemptedIds, DEFAULT_FILTERS, loadFilters, saveFilters, type Filters } from "@/lib/filters";
+import { offeredAnswers } from "@/lib/problem-utils";
 import { loadOrder, saveOrder, type QuizOrder } from "@/lib/quiz-order";
 import { cardState, cardStates, dueCount, humanizeInterval, markSeen, pickNext, type PickReason } from "@/lib/scheduler";
 import { shuffle } from "@/lib/shuffle";
 import { clearAttempts, computeStats, loadAttempts, saveAttempt, type Attempt } from "@/lib/storage";
-import { formatLoss, formatPlayedAt } from "@/lib/matches";
 import { parseXgid } from "@/lib/xgid";
-import AnswerReveal from "./AnswerReveal";
-import Board from "./Board";
-import { QuizToggle } from "./DecisionFeedback";
-import ExplanationPanel from "./ExplanationPanel";
 import FilterPanel from "./FilterPanel";
+import ProblemCard from "./ProblemCard";
 import SessionStats from "./SessionStats";
 
 interface Current {
@@ -190,105 +185,43 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
     );
   }
 
-  const best = problem.answers[0];
-  const isCorrect = current.picked === best.id;
   const reason = REASON[current.reason];
 
   return (
     <div className="mx-auto max-w-7xl p-4">
       {filterPanel}
-      <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <section aria-label="Board">
-          <Board position={position} />
-        </section>
-
-        <section className="flex flex-col gap-4" aria-label="Question">
-          <header>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-500">
-              <span>Problem {count}</span>
-              <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${reason.className}`} title={reason.title} data-reason={current.reason}>
-                {reason.text}
-              </span>
-              {problem.origin && (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900" data-origin={problem.origin.site}>
-                  My mistake
-                </span>
-              )}
-              <span>·</span>
-              <span className="font-mono">{problem.id}</span>
-              <span>·</span>
-              <span>{problem.categories.join(", ")}</span>
-              <span>·</span>
-              <span>
-                gap {difficulty(problem).toFixed(3)} ({difficultyBand(problem)})
-              </span>
-            </div>
-            <h1 className="mt-1 text-2xl font-semibold">{questionText(position)}</h1>
-          </header>
-
-          {!current.picked ? (
-            <ol className="grid gap-2" aria-label="Answers">
-              {current.choices.map((a, i) => (
-                <li key={a.id}>
-                  <button
-                    type="button"
-                    onClick={() => choose(a)}
-                    className="w-full rounded-lg border border-stone-300 bg-white px-4 py-3 text-left text-lg shadow-sm transition hover:border-blue-500 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  >
-                    <span className="mr-3 inline-block w-5 text-stone-400">{i + 1}</span>
-                    <span className="font-mono">{a.label}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <>
-              <div
-                className={`rounded-lg px-4 py-3 text-lg font-medium ${
-                  isCorrect ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                }`}
-                role="status"
-              >
-                {isCorrect ? (
-                  "Correct."
-                ) : (
-                  <>
-                    Not the best play. Best: <span className="font-mono">{best.label}</span>
-                  </>
-                )}
-                {current.nextIn && (
-                  <span className="ml-2 text-sm font-normal opacity-80" data-next-in>
-                    Comes back in {current.nextIn}.
-                  </span>
-                )}
-              </div>
-              <AnswerReveal answers={problem.answers} pickedId={current.picked} offeredIds={current.choices.map((c) => c.id)} gameId={problem.origin?.played} />
-              {problem.origin && (
-                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-600" data-origin-line>
-                  <span>
-                    {problem.origin.site === "gnubg" ? "Your game against gnubg" : `Your ${problem.origin.site} match against ${problem.origin.opponent}`}
-                    {problem.origin.playedAt && ` on ${formatPlayedAt(problem.origin.playedAt).slice(0, 10)}`}: you played{" "}
-                    <span className="font-mono">{problem.answers.find((a) => a.id === problem.origin!.played)?.label ?? problem.origin.played}</span>{" "}
-                    <span className="font-mono text-red-700">{formatLoss(problem.origin.loss)}</span>.
-                  </span>
-                  <QuizToggle key={problem.id} decisionId={problem.id} initial={true} />
-                </p>
-              )}
-              <ExplanationPanel
-                key={problem.id}
-                problem={problem}
-                onGenerated={(id, patch) => setGenerated((g) => ({ ...g, [id]: { ...g[id], ...patch } }))}
-              />
-              <button
-                type="button"
-                onClick={next}
-                className="rounded-lg bg-blue-600 px-4 py-3 text-lg font-medium text-white shadow hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-              >
-                Next problem
-              </button>
-            </>
-          )}
-
+      <ProblemCard
+        problem={problem}
+        position={position}
+        choices={current.choices}
+        picked={current.picked}
+        onChoose={choose}
+        onGenerated={(id, patch) => setGenerated((g) => ({ ...g, [id]: { ...g[id], ...patch } }))}
+        badges={
+          <>
+            <span>Problem {count}</span>
+            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${reason.className}`} title={reason.title} data-reason={current.reason}>
+              {reason.text}
+            </span>
+          </>
+        }
+        verdictNote={
+          current.nextIn && (
+            <span className="ml-2 text-sm font-normal opacity-80" data-next-in>
+              Comes back in {current.nextIn}.
+            </span>
+          )
+        }
+        next={
+          <button
+            type="button"
+            onClick={next}
+            className="rounded-lg bg-blue-600 px-4 py-3 text-lg font-medium text-white shadow hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+          >
+            Next problem
+          </button>
+        }
+        below={
           <SessionStats
             stats={stats}
             onReset={() => {
@@ -296,35 +229,8 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
               setAttempts([]);
             }}
           />
-
-          <details className="text-sm text-stone-500">
-            <summary className="cursor-pointer">Position details</summary>
-            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-              <dt>XGID</dt>
-              <dd className="font-mono break-all">{problem.xgid}</dd>
-              <dt>Source</dt>
-              <dd>
-                {problem.source ?? "—"}
-                {problem.origin && (
-                  <>
-                    {" · "}
-                    <a href={`/matches/${problem.origin.matchId}`} className="text-blue-700 underline">
-                      the match
-                    </a>
-                  </>
-                )}
-              </dd>
-              <dt>Engine</dt>
-              <dd>
-                {problem.analysis?.engine ?? "—"}
-                {problem.analysis?.plies !== undefined && ` (${problem.analysis.plies}-ply)`}
-                {problem.analysis?.positionClass && `, ${problem.analysis.positionClass}`}
-              </dd>
-            </dl>
-            <p className="mt-2">Keys: 1–4 pick an answer, Enter or N for the next problem.</p>
-          </details>
-        </section>
-      </div>
+        }
+      />
     </div>
   );
 }

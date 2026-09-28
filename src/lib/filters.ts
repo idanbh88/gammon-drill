@@ -1,8 +1,8 @@
 /**
  * Study filters: category, question type, difficulty, source, mistake size and progress.
  * Difficulty is the equity gap between the best and the second-best answer (smaller gap =
- * harder); the source separates the problem sets from the user's own mistakes (problems with an
- * origin), the mistake size picks those by what the move played lost (errors, blunders), and the
+ * harder); the source separates the problem sets, the user's own mistakes (problems with an
+ * origin) and Robertie's book (problems with `book`), the mistake size picks those by what the move played lost (errors, blunders), and the
  * progress can leave out every problem already answered (the attempt log, passed in). The chosen
  * filters are remembered in localStorage as a convenience.
  */
@@ -30,10 +30,10 @@ export const BAND_LABEL: Record<DifficultyBand, string> = {
   easy: `Easy (gap ≥ ${MEDIUM_MAX})`,
 };
 
-export const SOURCES = ["all", "sets", "mistakes"] as const;
+export const SOURCES = ["all", "sets", "mistakes", "book"] as const;
 export type Source = (typeof SOURCES)[number];
 
-export const SOURCE_LABEL: Record<Source, string> = { all: "All", sets: "Problem sets", mistakes: "My mistakes" };
+export const SOURCE_LABEL: Record<Source, string> = { all: "All", sets: "Problem sets", mistakes: "My mistakes", book: "Robertie 501" };
 
 /** The size of one of the user's own mistakes: what the move played lost (matches.ts thresholds). */
 export const MISTAKE_SIZES = ["error", "blunder"] as const;
@@ -75,7 +75,7 @@ export interface Filters {
   type: QuestionType | "all";
   /** Empty = any difficulty. */
   difficulty: DifficultyBand[];
-  /** Problem sets (data/*.json), the user's own mistakes, or both. */
+  /** Problem sets (data/*.json), the user's own mistakes, Robertie's book, or all of them. */
   source: Source;
   /**
    * Empty = any problem; otherwise only the user's own mistakes of these sizes. The panel sets
@@ -102,8 +102,9 @@ export function isDefaultFilters(f: Filters): boolean {
 /** `attempted`: the ids answered so far (`attemptedIds`), needed for the progress filter. */
 export function matchesFilters(p: Problem, f: Filters, attempted: ReadonlySet<string> = NONE_ATTEMPTED): boolean {
   if (f.progress === "untried" && attempted.has(p.id)) return false;
-  if (f.source === "sets" && p.origin) return false;
+  if (f.source === "sets" && (p.origin || p.book)) return false;
   if (f.source === "mistakes" && !p.origin) return false;
+  if (f.source === "book" && !p.book) return false;
   if (f.type !== "all" && p.type !== f.type) return false;
   if (f.categories.length > 0 && !p.categories.some((c) => f.categories.includes(c))) return false;
   if (f.difficulty.length > 0 && !f.difficulty.includes(difficultyBand(p))) return false;

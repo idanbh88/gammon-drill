@@ -69,7 +69,7 @@ def ascii_path(path: Path) -> Path:
     return target
 
 
-def setup_commands(plies: int, cube_plies: int) -> list[str]:
+def setup_commands(plies: int, cube_plies: int, full_width: bool = False) -> list[str]:
     """Same settings as gnubg_inner.setup_commands (kept in sync by test)."""
     cmds = [
         "set lang en",
@@ -83,7 +83,10 @@ def setup_commands(plies: int, cube_plies: int) -> list[str]:
     if plies >= 1:
         cmds.append(f"set evaluation movefilter {plies} 0 -1 0 0")
         for level in range(1, plies):
-            cmds.append(f"set evaluation movefilter {plies} {level} 10 4 0.16")
+            if full_width:
+                cmds.append(f"set evaluation movefilter {plies} {level} -1 0 0")
+            else:
+                cmds.append(f"set evaluation movefilter {plies} {level} 10 4 0.16")
     return cmds
 
 
@@ -131,9 +134,12 @@ def run_gnubg(
     gnubg: str | None = None,
     timeout: float | None = None,
     log=None,
+    full_width: bool = False,
 ) -> list[dict]:
     """Analyse XGIDs. Returns one raw record per XGID (see gnubg_inner) with ``cube_text``
-    filled in for cube decisions. Raises GnubgError when gnubg is missing or fails."""
+    filled in for cube decisions. Raises GnubgError when gnubg is missing or fails.
+    ``full_width`` scores every legal play at the full depth (the Robertie import compares the
+    book's play with gnubg's best at the same depth); by default only the top few get there."""
     exe = find_gnubg(gnubg)
     if not exe:
         raise GnubgError("gnubg-cli not found; pass --gnubg or set BG_GNUBG")
@@ -153,9 +159,10 @@ def run_gnubg(
             BG_OUT=str(out_file),
             BG_PLIES=str(plies),
             BG_CUBE_PLIES=str(cube_plies),
+            BG_FULL_WIDTH="1" if full_width else "0",
         )
         if log:
-            log(f"gnubg: {exe} ({len(xgids)} positions, {plies}-ply chequer, {cube_plies}-ply cube)")
+            log(f"gnubg: {exe} ({len(xgids)} positions, {plies}-ply chequer{' (every play)' if full_width else ''}, {cube_plies}-ply cube)")
         stdout = _run(exe, ["-t", "-q", "-p", str(ascii_path(script))], env, timeout)
         if not out_file.exists():
             raise GnubgError(f"gnubg produced no output. Output tail:\n{stdout[-3000:]}")

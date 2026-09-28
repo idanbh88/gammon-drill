@@ -113,6 +113,28 @@ export interface Problem {
   explanationTranslation?: ExplanationTranslation;
   /** Set on the user's own decisions in the quiz ("My mistakes"); never in data/*.json. */
   origin?: ProblemOrigin;
+  /** Set on the problems of Robertie's book (data/robertie/, git-ignored); never in data/*.json. */
+  book?: BookRef;
+}
+
+/** How gnubg rates the book's answer: its equity loss against gnubg's best, in the app's bands. */
+export type BookAgreement = "same" | "close" | "differs" | "blunder";
+
+/** A problem from Robertie's "501 Essential Backgammon Problems" and the book's answer. */
+export interface BookRef {
+  /** The problem's number in the book (the id is "robertie-<number>"). */
+  number: number;
+  chapter: number;
+  chapterTitle: string;
+  /** The caption as printed ("Black to play 41."). The book's Black is Blue here. */
+  caption: string;
+  /** The book's answer as one of this problem's answer ids (gnubg's notation for the same play). */
+  answerId: string;
+  /** gnubg's equity loss for the book's answer (0 when gnubg agrees). */
+  loss: number;
+  agreement: BookAgreement;
+  /** The depth of the analysis the comparison comes from. */
+  plies: number;
 }
 
 /** Where one of the user's own decisions came from, and what they played. */

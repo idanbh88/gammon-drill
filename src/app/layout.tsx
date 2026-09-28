@@ -27,6 +27,9 @@ export default function RootLayout({
             <Link href="/lessons" className="text-stone-600 hover:text-stone-900">
               Lessons
             </Link>
+            <Link href="/robertie" className="text-stone-600 hover:text-stone-900">
+              Robertie
+            </Link>
             <Link href="/stats" className="text-stone-600 hover:text-stone-900">
               Stats
             </Link>

@@ -5,8 +5,11 @@
  * without a translation. Each result is inserted into table translations (never updated or
  * deleted); the loaders show the newest translation of the explanation on show.
  *
- *   GET  /api/explain/translate?explanationId=12   -> the prompt that would be sent (no API call)
- *   POST /api/explain/translate { explanationId, model } -> { translation, mismatches, ... }
+ *   GET  /api/explain/translate?explanationId=12[&problemId=robertie-12]   -> the prompt that would be sent (no API call)
+ *   POST /api/explain/translate { explanationId, model, problemId? } -> { translation, mismatches, ... }
+ *
+ * Row ids are per database: a problem of Robertie's book (problemId robertie-<n>) has its
+ * explanations in data/robertie/robertie.sqlite, every other problem in data/store.sqlite.
  *
  * The direction comes from the explanation's language; the model is the one picked in the panel,
  * the effort always TRANSLATION_EFFORT.
@@ -17,7 +20,9 @@ import { MAX_TOKENS } from "@/lib/explain";
 import { translationMismatches } from "@/lib/explain-audit";
 import { isExplainModel } from "@/lib/explain-models";
 import { DATA_DIR } from "@/lib/problems";
-import { insertTranslation, openStore, readExplanation, storePath } from "@/lib/store";
+import { robertieNumber } from "@/lib/robertie";
+import { openRobertieStore, robertieStorePath, ROBERTIE_SCHEMA } from "@/lib/robertie-store";
+import { getExplanation, insertTranslation, openStore, readExplanation, storePath, withReadOnlyFile, type ExplanationRow } from "@/lib/store";
 import { buildTranslationPrompt, cleanTranslation, TRANSLATION_EFFORT, TRANSLATION_PROMPTS, translationSha256 } from "@/lib/translate";
 import { translationLanguage, type ExplanationTranslation } from "@/types/problem";
 
@@ -28,6 +33,13 @@ function bad(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
 }
 
+const isBook = (problemId: unknown) => typeof problemId === "string" && robertieNumber(problemId) !== null;
+
+function findExplanation(id: number, problemId: unknown): ExplanationRow | null {
+  if (!isBook(problemId)) return readExplanation(DATA_DIR, id);
+  return withReadOnlyFile(robertieStorePath(DATA_DIR), ROBERTIE_SCHEMA, null, (db) => getExplanation(db, id));
+}
+
 /** A positive integer row id, given as a number or a string of digits. */
 function parseId(x: unknown): number | null {
   const n = typeof x === "string" && /^\d+$/.test(x) ? Number(x) : x;
@@ -35,9 +47,10 @@ function parseId(x: unknown): number | null {
 }
 
 export async function GET(req: Request) {
-  const raw = new URL(req.url).searchParams.get("explanationId");
+  const params = new URL(req.url).searchParams;
+  const raw = params.get("explanationId");
   const id = parseId(raw);
-  const original = id === null ? null : readExplanation(DATA_DIR, id);
+  const original = id === null ? null : findExplanation(id, params.get("problemId"));
   if (!original) return bad(`unknown explanation "${raw ?? ""}"`);
   const into = translationLanguage(original.language);
   return NextResponse.json({
@@ -53,7 +66,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  let body: { explanationId?: unknown; model?: unknown };
+  let body: { explanationId?: unknown; model?: unknown; problemId?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -63,7 +76,7 @@ export async function POST(req: Request) {
   if (id === null) return bad("explanationId is required");
   const { model } = body;
   if (typeof model !== "string" || !isExplainModel(model)) return bad(`unknown model "${String(model)}"`);
-  const original = readExplanation(DATA_DIR, id);
+  const original = findExplanation(id, body.problemId);
   if (!original) return bad(`unknown explanation ${id}`);
   if (!hasApiKey()) return bad(NO_KEY, 500);
 
@@ -79,7 +92,7 @@ export async function POST(req: Request) {
   if (!text) return bad("The model returned no text.", 502);
 
   const generatedAt = new Date().toISOString();
-  const db = openStore(storePath(DATA_DIR));
+  const db = isBook(body.problemId) ? openRobertieStore(DATA_DIR) : openStore(storePath(DATA_DIR));
   try {
     insertTranslation(db, {
       explanationId: id,

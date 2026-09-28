@@ -18,8 +18,12 @@ writes `data/lessons/lessons.sqlite`, a separate, git-ignored database. At `/pla
 matches against gnubg: one long-lived gnubg process (`src/lib/engine.ts` +
 `pipeline/bgpipeline/gnubg_server.py`) plays its best 2-ply move and grades each of the user's
 decisions as it is made; the games go into the same match tables, PR is shown for both sides,
-and every error of the user (games and imports) is in the quiz as "My mistakes". Phases 1–6 are
-built; phase 7 is planned; see `docs/SPEC.md` § Status for what is still open.
+and every error of the user (games and imports) is in the quiz as "My mistakes". Bill Robertie's
+*501 Essential Backgammon Problems*, read from the user's scan by `import_robertie.py` (a local
+board reader and Claude's reading of every diagram must agree; Claude transcribes the solutions;
+gnubg scores every answer of the book), is the `/robertie` section and a quiz source, in the
+git-ignored `data/robertie/robertie.sqlite`. Phases 1–6 and 8 are built; phase 7 is planned; see
+`docs/SPEC.md` § Status for what is still open.
 
 Repository: https://github.com/idanbh88/gammon-drill, branch `main`. Commit or push only when asked.
 
@@ -28,8 +32,8 @@ Repository: https://github.com/idanbh88/gammon-drill, branch `main`. Commit or p
 App (repo root, Node 24):
 
 ```bash
-npm run dev        # http://localhost:3000 (quiz), /play (gnubg), /lessons (Galaxy lessons), /stats (progress), /board (all positions), /matches (imported and played matches)
-npm test           # vitest: xgid, board, moves, move-input, game, play-service, play-ui, pr, mistakes, engine (live when gnubg is installed), data, filters, scheduler, store, matches, explain, explain-audit, rtl, lessons, lesson-*, pipeline-process, ndjson, quiz-order
+npm run dev        # http://localhost:3000 (quiz), /play (gnubg), /lessons (Galaxy lessons), /robertie (Robertie 501), /stats (progress), /board (all positions), /matches (imported and played matches)
+npm test           # vitest: xgid, board, moves, move-input, game, play-service, play-ui, pr, mistakes, engine (live when gnubg is installed), data, filters, scheduler, store, matches, explain, explain-audit, rtl, lessons, lesson-*, pipeline-process, ndjson, quiz-order, robertie, robertie-store
 npm run typecheck
 npm run lint
 npm run build
@@ -57,6 +61,9 @@ uv run analyze.py examples/seed.txt --merge-into ../data/problems.json --reclass
 uv run classify.py ../data/problems.json --log features.jsonl
 uv run import_match.py "C:\Users\<me>\Downloads\*.mat"       # what the upload button runs; --replace to analyse again
 uv run import_lessons.py "C:\Temp\bg\*.json"                  # Galaxy quiz exports -> data/lessons/ (the lessons upload runs it); --replace to import again
+uv run import_robertie.py "<scan>.pdf"                         # Robertie 501: every free stage; reports what the paid stage would cost
+uv run import_robertie.py "<scan>.pdf" --spend                 # + Claude's missing readings, directly, 4 at a time (cached); --batch for the batch API (half price, may stall for hours); --only s011-R,s003-L-1 for a few
+uv run import_robertie.py "<scan>.pdf" --stages assemble,gnubg,store,report   # after editing data/robertie/fixes.json
 ```
 
 Browser preview: `.claude/launch.json` has the `dev` server. Verify UI changes there.
@@ -68,19 +75,25 @@ data/*.json                 problem sets (ProblemSet JSON), data/README.md docum
 data/store.sqlite           explanations (append-only, with the effort asked for and the language) + their translations + matches / games / decisions + play_state, quiz_picks (schema v6 in src/lib/store-schema.ts)
 data/matches/               uploaded .mat files, as received
 data/lessons/               GIT-IGNORED Galaxy lessons: lessons.sqlite, <quiz id>/quiz.json (as received), <quiz id>/images/pNN[-cM].png
-src/app/                    page.tsx quiz, play/ new match + [id]/ game, lessons/ list + [id]/ player, stats/ progress, board/ every position rendered, matches/ list + [id]/ review
+data/robertie/              GIT-IGNORED Robertie 501: robertie.sqlite (schema v1 in src/lib/robertie-store-schema.ts), pages/s<NNN>-<L|R>.jpg,
+                            diagrams/<page>-<n>.png, claude/ (cached readings + batches.jsonl), readings/, gnubg/, fixes.json (by hand), report.json
+src/app/                    page.tsx quiz, play/ new match + [id]/ game, lessons/ list + [id]/ player, robertie/ chapters + chapter/[n]/ player + check/,
+                            stats/ progress, board/ every position rendered, matches/ list + [id]/ review
 src/app/api/play/           route.ts (new match), [id]/route.ts (state, one user action -> graded + gnubg's turn)
 src/app/api/quiz-picks/     route.ts: add a decision of the user to the quiz or take it out
 src/app/api/explain/        route.ts: builds the prompt, calls Claude, inserts the store row; translate/route.ts: the translation of a stored explanation into the other language
 src/app/api/matches/import/ route.ts: saves the upload, spawns uv run import_match.py, streams its NDJSON progress
 src/app/api/lessons/        import/route.ts (runs import_lessons.py like the match upload), images/[quizId]/[file]/route.ts (serves pictures)
+src/app/api/robertie/       images/[kind]/[file] (scans), text/[number] (Robertie's text + translation), translate (his text into Hebrew), reports
 src/components/             Board.tsx (SVG, hook-free; optional play props: highlights, dice, hidden checkers, overlay, pointer
                             handlers, last-move marks), Quiz.tsx, ExplanationPanel.tsx, FilterPanel.tsx, AnswerReveal.tsx,
                             CategoryStats.tsx, PlayGame.tsx (the game screen, client-only via PlayLoader), PlayBoard.tsx (tap / drag
                             / dice input, animation frames), FlyingChecker.tsx (Web Animations glide), DecisionFeedback.tsx (verdict +
                             ranking + quiz toggle + explanation), NewMatchForm.tsx,
                             UploadMatch.tsx (file input + progress log), MatchReview.tsx (errors per game, PR, both sides),
-                            Lesson.tsx (lesson player), LessonList.tsx (sets + progress), UploadLessons.tsx, *Loader.tsx (ssr: false)
+                            Lesson.tsx (lesson player), LessonList.tsx (sets + progress), UploadLessons.tsx, *Loader.tsx (ssr: false),
+                            ProblemCard.tsx (board + question + answers + reveal, shared by Quiz and RobertieChapter), RobertieCard.tsx
+                            (Robertie's text, scans, Translate to Hebrew), RobertieChapters.tsx, HebrewText.tsx (RTL with moves LTR)
 src/lib/xgid.ts, board.ts   XGID parse/format, perspective flip (+ withState inverse), pip counts, question text
 src/lib/moves.ts            legal-play generator (+ legalSequences, every entry order) + gnubg-style notation
 src/lib/move-input.ts       move entry, Galaxy style: dice in tap order (swap), tap = first die that works, drag destinations, undo
@@ -108,16 +121,21 @@ src/lib/lesson-store.ts     node:sqlite reads of data/lessons/lessons.sqlite (sc
 src/lib/lessons.ts          lesson view types, grouping, image URLs, choice colours (client-safe)
 src/lib/lesson-progress.ts  lesson answers + runs in localStorage, per-set progress; lesson-player.ts: the player's reducer
 src/lib/pipeline-process.ts findUv + spawn a Python importer and stream its NDJSON (both upload routes); ndjson.ts: client reader
+src/lib/robertie-store.ts   node:sqlite reads of data/robertie/robertie.sqlite (quiz problems, chapters, checks, text), the app's writes, image paths
+src/lib/robertie.ts         book ids, agreement marks, verdict line, image URLs, chapter progress + run markers (client-safe)
 src/types/problem.ts        Problem / Answer / ProblemSet types + zod schemas
 pipeline/analyze.py         XGIDs -> gnubg -> problem set JSON
 pipeline/classify.py        rule-based category tags + feature log
 pipeline/import_forum.py    XGIDs and liked replies from forum threads
 pipeline/import_match.py    .mat -> replay -> gnubg -> match tables in data/store.sqlite (CLI and the app's upload)
 pipeline/import_lessons.py  Galaxy quiz JSON -> pictures + data/lessons/lessons.sqlite (CLI and the app's upload)
+pipeline/import_robertie.py the book's scan -> pages, diagrams, Claude + local readings, XGIDs, gnubg -> data/robertie/robertie.sqlite
 pipeline/bgpipeline/gnubg_server.py  runs inside the app's gnubg: JSON request per stdin line -> "@@BG " answers (hint / cfevaluate + pipeline scoring)
 pipeline/bgpipeline/        xgid.py, moves.py (ports of src/lib), gnubg_*.py, features.py, classify.py,
                             mat.py (.mat parser), replay.py (decisions + XGIDs), match_score.py, store.py (sqlite, schema from the .ts),
-                            cli.py (expand_paths, NDJSON emit), galaxy_quiz.py (export parser), image_fetch.py, lesson_store.py
+                            cli.py (expand_paths, NDJSON emit), galaxy_quiz.py (export parser), image_fetch.py, lesson_store.py,
+                            pdf_pages.py, board_reader.py (OpenCV), claude_pages.py (Claude readings, batches), book_notation.py,
+                            robertie.py (assembly, checks, fixes), book_score.py, robertie_store.py
 ```
 
 ## Conventions that must not drift
@@ -192,11 +210,25 @@ pipeline/bgpipeline/        xgid.py, moves.py (ports of src/lib), gnubg_*.py, fe
   `data/` itself (the quiz loader would reject it). The lesson schema is
   `src/lib/lesson-store-schema.ts` (same regex rules as the main one); `--replace` rewrites one
   set's rows, the only delete there, and reuses pictures that still match.
+- **Robertie 501** (the book, copyrighted, from the user's own scan): everything read from it lives
+  in the git-ignored `data/robertie/` and never goes into `data/store.sqlite`, `data/*.json`, a test
+  fixture or the chat (the tests draw synthetic diagrams, `tests/render_book_board.py`). That
+  includes explanations and translations of book problems: `/api/explain` and
+  `/api/explain/translate` store them in `robertie.sqlite` (its `explanations` / `translations`
+  tables are copies of the main store's, a test keeps them equal; the panel sends `problemId` so
+  the translate route picks the database). Quiz ids are `robertie-<n>`; `Problem.book` is set by
+  the loader only, like `origin`, and is never in JSON. The position: Black (the book's player on
+  roll) is player 1 and Blue, money without Jacoby, an owned cube is a 2-cube. gnubg judges; the
+  book's answer is always offered and marked with the 0.02 / 0.08 lines. Claude is called by the
+  importer only with `--spend`, once per item (cached); `fixes.json` is written by hand, never by
+  the pipeline. The schema is `src/lib/robertie-store-schema.ts` (same regex rules); a re-import
+  rewrites the importer's four tables and never the app's.
 - `src/lib/xgid.ts` + `moves.ts` (+ `withState` in `board.ts`) and `pipeline/bgpipeline/xgid.py`
   + `moves.py` are ports of each other; change both and mirror the tests.
 - `localStorage` keys: `bg-trainer/attempts/v1`, `bg-trainer/filters/v4` (v3, v2 and v1 are
   migrated on load), `bg-trainer/quiz-order/v1` (new first / random, apart from the filters),
   `bg-trainer/lessons/v1` (lesson answers and runs, separate from the quiz),
+  `bg-trainer/robertie/v1` (a chapter's run start; the answers are in the attempt log),
   `bg-trainer/play/v1` (animation speed). Changing a shape needs a new version key plus a
   migration. sessionStorage `bg-trainer/play-start/<match>` is a one-time hand-off, removed on read.
 - **Play screen input and animation**: `Board.tsx` stays a hook-free picture (server pages render
@@ -220,6 +252,10 @@ pipeline/bgpipeline/        xgid.py, moves.py (ports of src/lib), gnubg_*.py, fe
   absolute paths: .NET's working directory ignores `Set-Location`.
 - `pipeline/tests/fixtures/hint_cube.txt` is not UTF-8 (gnubg's code page); read it with
   `errors="replace"`.
+- OpenCV's `imread` / `imwrite` cannot open paths with Hebrew in them: read bytes with Python and
+  `cv2.imdecode`, write `cv2.imencode(...)` bytes (`pdf_pages.read_gray` / `write_png`). OpenCV 5
+  returns `HoughLinesP` as (N, 4), not (N, 1, 4). The venv's `pipeline/.venv/Scripts/python.exe`
+  runs from Git Bash (with `PYTHONIOENCODING=utf-8`) where `uv` does not.
 - Stay on ESLint 9 (`eslint-config-next` 16 breaks on ESLint 10). Next 16 lint rules forbid
   `setState` inside effects and JSX inside try/catch.
 - `create-next-app` refuses the directory name (capital letters); the scaffold is hand-written.

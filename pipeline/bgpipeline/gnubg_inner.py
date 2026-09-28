@@ -2,7 +2,8 @@
 
 Standard library only (gnubg embeds its own Python 3.10). Reads XGIDs from the file named by
 the ``BG_XGIDS`` environment variable, evaluates each one and writes a JSON list to
-``BG_OUT``. ``BG_PLIES`` / ``BG_CUBE_PLIES`` set the evaluation depth.
+``BG_OUT``. ``BG_PLIES`` / ``BG_CUBE_PLIES`` set the evaluation depth; ``BG_FULL_WIDTH=1`` evaluates every
+play at that depth instead of the top few.
 
 For each XGID the record holds gnubg's position info, cube info, board, position class and,
 for checker plays, the structured ``hint`` result. gnubg's Python ``hint()`` does not support
@@ -15,7 +16,7 @@ import os
 import sys
 
 
-def setup_commands(plies, cube_plies):
+def setup_commands(plies, cube_plies, full_width=False):
     cmds = [
         "set lang en",
         "set automatic game off",
@@ -26,11 +27,15 @@ def setup_commands(plies, cube_plies):
         "set evaluation cubedecision evaluation plies %d" % cube_plies,
     ]
     # Move filters: without them gnubg keeps everything at 0-ply. Level 0 sends every move to
-    # 1-ply, later levels keep the top 10 (+4 within 0.16) for the next ply.
+    # 1-ply, later levels keep the top 10 (+4 within 0.16) for the next ply; full_width sends
+    # every move to every level, so each play is scored at the full depth.
     if plies >= 1:
         cmds.append("set evaluation movefilter %d 0 -1 0 0" % plies)
         for level in range(1, plies):
-            cmds.append("set evaluation movefilter %d %d 10 4 0.16" % (plies, level))
+            if full_width:
+                cmds.append("set evaluation movefilter %d %d -1 0 0" % (plies, level))
+            else:
+                cmds.append("set evaluation movefilter %d %d 10 4 0.16" % (plies, level))
     return cmds
 
 
@@ -41,11 +46,12 @@ def main():
     out_file = os.environ["BG_OUT"]
     plies = int(os.environ.get("BG_PLIES", "2"))
     cube_plies = int(os.environ.get("BG_CUBE_PLIES", str(plies)))
+    full_width = os.environ.get("BG_FULL_WIDTH") == "1"
 
     with open(xgids_file, "r", encoding="utf-8") as f:
         xgids = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-    for cmd in setup_commands(plies, cube_plies):
+    for cmd in setup_commands(plies, cube_plies, full_width):
         gnubg.command(cmd)
 
     results = []

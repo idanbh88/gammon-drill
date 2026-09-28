@@ -4,20 +4,22 @@
  * ADDED_COLUMNS out of this file with regular expressions: keep all three simple literals.
  *
  * Every version so far is additive (v2 added the match tables, v3 play_state and quiz_picks, v4
- * explanations.effort, v5 translations), so upgrading a file means running the DDL, adding
- * ADDED_COLUMNS that are missing and bumping meta.schema_version; both store.ts and store.py do
- * that. Bump SCHEMA_VERSION when a table changes shape; a new column goes in its CREATE TABLE
- * (new files) and in ADDED_COLUMNS (older files).
+ * explanations.effort, v5 translations, v6 explanations.language), so upgrading a file means
+ * running the DDL, adding ADDED_COLUMNS that are missing and bumping meta.schema_version; both
+ * store.ts and store.py do that. Bump SCHEMA_VERSION when a table changes shape; a new column goes
+ * in its CREATE TABLE (new files) and in ADDED_COLUMNS (older files).
  *
- * Explanations and their translations (the Hebrew text shown under each explanation, one row
- * per request, keyed by the explanation's row id) are only ever inserted. Imported match rows
- * are reproducible engine output, so a re-import may delete and rewrite one match's games and
- * decisions. Matches played against gnubg in the app (site 'gnubg') are written by the app as
+ * Explanations and their translations (the text in the other language shown with each
+ * explanation, one row per request, keyed by the explanation's row id) are only ever inserted.
+ * explanations.language is the language of the text: 'he' from 2026-09-27 on, NULL (English) in
+ * rows written before; translations.language is the language translated into. Imported match
+ * rows are reproducible engine output, so a re-import may delete and rewrite one match's games
+ * and decisions. Matches played against gnubg in the app (site 'gnubg') are written by the app as
  * they are played, with the game in progress in play_state; they are never deleted. quiz_picks
  * holds the user's own choices about which decisions the quiz shows, one row per decision,
  * updated in place.
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /**
  * Columns added to a table after it was first created. CREATE TABLE IF NOT EXISTS leaves an
@@ -26,6 +28,7 @@ export const SCHEMA_VERSION = 5;
  */
 export const ADDED_COLUMNS = `
 explanations effort TEXT
+explanations language TEXT
 `;
 
 export const SCHEMA_SQL = `
@@ -50,7 +53,8 @@ CREATE TABLE IF NOT EXISTS explanations (
   cache_read_tokens INTEGER,
   request_id TEXT,
   served_by_fallback INTEGER NOT NULL DEFAULT 0,
-  effort TEXT
+  effort TEXT,
+  language TEXT
 );
 
 CREATE INDEX IF NOT EXISTS explanations_xgid ON explanations (xgid, id);

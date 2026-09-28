@@ -32,13 +32,15 @@ the loader would read it as a problem set and fail.
 ## Explanations
 
 The quiz generates explanations on demand (button under the answer reveal, model of your
-choice) and inserts each one into `store.sqlite` (table `explanations`, schema in
-`src/lib/store-schema.ts`). Right after that the panel asks for a Hebrew translation, shown
-under the English and inserted into table `translations` (keyed by the explanation's row id;
-older explanations get a "Translate to Hebrew" button). Rows are never updated or deleted; the
-loader shows the newest row for a position's XGID, with the newest translation of that row, and
-falls back to the JSON `explanation` field when there is none. Python can read the file with
-the standard library `sqlite3`.
+choice), written in Hebrew, and inserts each one into `store.sqlite` (table `explanations`,
+column `language` = `he`; schema in `src/lib/store-schema.ts`). Right after that the panel asks
+for an English translation, shown under the Hebrew and inserted into table `translations`
+(keyed by the explanation's row id; one stored without a translation gets a "Translate to …"
+button). Explanations written before 2026-09-27 are English (`language` NULL) with Hebrew
+translations, shown the same way round. Rows are never updated or deleted; the loader shows the
+newest row for a position's XGID, with the newest translation of that row, and falls back to
+the JSON `explanation` field (English) when there is none. Python can read the file with the
+standard library `sqlite3`.
 
 ## Matches
 

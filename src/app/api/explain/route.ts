@@ -11,21 +11,31 @@
  * `problemId` is a quiz problem id or a match decision id (match-<id>-g1-m7-checker, from the
  * store); for a decision the prompt also names the move that was played.
  *
- * `explanationMeta.id` is the new row; the panel then asks /api/explain/translate for its Hebrew
- * translation.
+ * The explanation is written in Hebrew (EXPLANATION_LANGUAGE, recorded in the row).
+ * `explanationMeta.id` is the new row; the panel then asks /api/explain/translate for its
+ * English translation.
  *
  * The API key comes from ANTHROPIC_API_KEY, which Next.js loads from the repo-root .env into the
  * server process; it never reaches the client.
  */
 import { NextResponse } from "next/server";
 import { askClaude, ClaudeError, hasApiKey, NO_KEY, type ClaudeReply } from "@/lib/claude";
-import { buildPrompt, cleanExplanation, maxTokensFor, promptSha256, PROMPT_VERSION, SYSTEM_PROMPT, type PromptOptions } from "@/lib/explain";
+import {
+  buildPrompt,
+  cleanExplanation,
+  EXPLANATION_LANGUAGE,
+  maxTokensFor,
+  promptSha256,
+  PROMPT_VERSION,
+  SYSTEM_PROMPT,
+  type PromptOptions,
+} from "@/lib/explain";
 import { auditExplanation } from "@/lib/explain-audit";
 import { explainModel, isExplainEffort, isExplainModel, suggestedModel } from "@/lib/explain-models";
 import { toMatchDecision } from "@/lib/matches";
 import { DATA_DIR, loadProblems } from "@/lib/problems";
 import { insertExplanation, openStore, readDecision, readLatestExplanations, storePath } from "@/lib/store";
-import type { Problem } from "@/types/problem";
+import type { ExplanationMeta, Problem } from "@/types/problem";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +60,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     problemId: found.problem.id,
     promptVersion: PROMPT_VERSION,
+    language: EXPLANATION_LANGUAGE,
     suggestedModel: suggestedModel(found.problem),
     system: SYSTEM_PROMPT,
     prompt: buildPrompt(found.problem, found.opts),
@@ -103,14 +114,16 @@ export async function POST(req: Request) {
       requestId: reply.requestId,
       servedByFallback: reply.servedByFallback,
       effort,
+      language: EXPLANATION_LANGUAGE,
     });
   } finally {
     db.close();
   }
 
+  const explanationMeta: ExplanationMeta = { id, model: reply.model, generatedAt: generatedAt.slice(0, 10), effort, language: EXPLANATION_LANGUAGE };
   return NextResponse.json({
     explanation,
-    explanationMeta: { id, model: reply.model, generatedAt: generatedAt.slice(0, 10), effort },
+    explanationMeta,
     audit: auditExplanation(problem, explanation),
     servedByFallback: reply.servedByFallback,
     usage: { inputTokens: reply.inputTokens, outputTokens: reply.outputTokens },

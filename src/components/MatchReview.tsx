@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { questionText } from "@/lib/board";
-import { formatLoss, formatPlayedAt, groupByGame, matchResult, summarize, type MatchDecision } from "@/lib/matches";
+import { formatLoss, formatPlayedAt, formatScore, groupByGame, matchResult, summarize, type MatchDecision } from "@/lib/matches";
 import type { PlayerRating } from "@/lib/pr";
 import type { GameRow, MatchRow } from "@/lib/store";
 import { parseXgid } from "@/lib/xgid";
@@ -116,7 +116,7 @@ export default function MatchReview({
         </h1>
         <p className="text-sm text-stone-500">
           {match.matchLength > 0 ? `${match.matchLength}-point match` : "Money session"} · {formatPlayedAt(match.playedAt) || "date unknown"} ·{" "}
-          {vsGnubg ? "played here" : `${match.site} #${match.siteMatchId}`} · score {result.score1}–{result.score2}
+          {vsGnubg ? "played here" : `${match.site} #${match.siteMatchId}`} · score {formatScore(user, result.score1, result.score2)}
           {result.winner && (result.winner === match.analysedPlayer ? ", you won" : ", you lost")} · gnubg {match.plies}-ply
         </p>
         <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" data-summary>
@@ -193,7 +193,7 @@ export default function MatchReview({
               Game {number}
               {g && (
                 <span className="ml-2 text-sm font-normal text-stone-500">
-                  score {g.score1}–{g.score2}
+                  score {formatScore(user, g.score1, g.score2)}
                   {g.crawford && " · Crawford"}
                   {g.winner && ` · ${g.winner === match.analysedPlayer ? "you" : them} won ${g.points ?? "?"} point${g.points === 1 ? "" : "s"}`}
                 </span>

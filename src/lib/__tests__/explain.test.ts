@@ -1,18 +1,20 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildPrompt, cleanExplanation, describePosition, maxTokensFor, promptSha256, PROMPT_VERSION, SYSTEM_PROMPT } from "@/lib/explain";
-import { DEFAULT_MODEL, explainModel, HARD_MODEL, isExplainEffort, isExplainModel, isSlow, suggestedModel } from "@/lib/explain-models";
 import {
-  buildTranslationPrompt,
-  cleanTranslation,
-  TRANSLATION_EFFORT,
-  TRANSLATION_PROMPT_VERSION,
-  TRANSLATION_SYSTEM_PROMPT,
-  translationSha256,
-} from "@/lib/translate";
+  buildPrompt,
+  cleanExplanation,
+  describePosition,
+  EXPLANATION_LANGUAGE,
+  maxTokensFor,
+  promptSha256,
+  PROMPT_VERSION,
+  SYSTEM_PROMPT,
+} from "@/lib/explain";
+import { DEFAULT_MODEL, explainModel, HARD_MODEL, isExplainEffort, isExplainModel, isSlow, suggestedModel } from "@/lib/explain-models";
+import { buildTranslationPrompt, cleanTranslation, TRANSLATION_EFFORT, TRANSLATION_PROMPTS, translationSha256 } from "@/lib/translate";
 import { parseXgid } from "@/lib/xgid";
-import type { Problem } from "@/types/problem";
+import { explanationLanguage, translationLanguage, type Problem } from "@/types/problem";
 
 const ROOT = path.resolve(__dirname, "..", "..", "..");
 const problems: Problem[] = JSON.parse(readFileSync(path.join(ROOT, "data", "problems.json"), "utf8")).problems;
@@ -49,7 +51,7 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("GNU Backgammon 2-ply evaluation");
     expect(prompt).toContain("Blue checkers back (bar + White's home board): 2");
     expect(prompt).toContain("a hit is available: no");
-    expect(prompt.endsWith("Write the explanation now.")).toBe(true);
+    expect(prompt.endsWith("Write the explanation now, in Hebrew.")).toBe(true);
   });
 
   it("contains the facts of a cube problem", () => {
@@ -65,7 +67,7 @@ describe("buildPrompt", () => {
     expect(plain).not.toContain("reviewing a match");
     const played = buildPrompt(byId["seed-001"], { played: { label: "24/23 13/10", equityLoss: 0.231 } });
     expect(played).toContain("they played 24/23 13/10, which loses 0.231 against the best play");
-    expect(played.endsWith("Write the explanation now.")).toBe(true);
+    expect(played.endsWith("Write the explanation now, in Hebrew.")).toBe(true);
     expect(played.indexOf("reviewing a match")).toBeGreaterThan(played.indexOf("Board features"));
     const best = buildPrompt(byId["seed-001"], { played: { label: "8/5 6/5", equityLoss: 0 } });
     expect(best).toContain("they played 8/5 6/5, which is the best play");
@@ -77,8 +79,17 @@ describe("buildPrompt", () => {
     expect(a).toMatch(/^[0-9a-f]{64}$/);
     expect(promptSha256(buildPrompt(byId["seed-001"]))).toBe(a);
     expect(promptSha256(buildPrompt(byId["seed-002"]))).not.toBe(a);
-    expect(PROMPT_VERSION).toBe("v3");
+    expect(PROMPT_VERSION).toBe("v4");
     expect(SYSTEM_PROMPT).toContain("3 to 5 sentences");
+  });
+
+  it("asks for the explanation in Hebrew, with the notation and numbers of the data", () => {
+    expect(EXPLANATION_LANGUAGE).toBe("he");
+    expect(SYSTEM_PROMPT).toContain("you write it in Hebrew");
+    expect(SYSTEM_PROMPT).toContain("Blue is כחול and White is לבן");
+    expect(SYSTEM_PROMPT).toContain("Write every move exactly as the data does");
+    expect(SYSTEM_PROMPT).toContain("every number in digits");
+    expect(SYSTEM_PROMPT).toContain("never after a word that is just the English term in Hebrew letters");
   });
 });
 
@@ -87,27 +98,58 @@ describe("cleanExplanation", () => {
     const raw = "**Explanation:**\n\n- 8/5 6/5 makes the **5-point**.\n\n1. The alternatives split.\n```\nx\n```\n";
     expect(cleanExplanation(raw)).toBe("8/5 6/5 makes the 5-point. The alternatives split.");
   });
+
+  it("strips a Hebrew label and invisible marks from a Hebrew explanation", () => {
+    const rlm = String.fromCharCode(0x200f);
+    const raw = `**הסבר:**\n\nכחול משחק 8/5 6/5${rlm} ובונה את נקודה 5.\n\nהמהלך 24/23 13/10 מפסי${String.fromCharCode(0xad)}ד 0.231.`;
+    expect(cleanExplanation(raw)).toBe("כחול משחק 8/5 6/5 ובונה את נקודה 5. המהלך 24/23 13/10 מפסיד 0.231.");
+  });
 });
 
-describe("Hebrew translation prompt", () => {
+describe("explanation languages", () => {
+  it("translates Hebrew into English and English (also unrecorded) into Hebrew", () => {
+    expect(translationLanguage("he")).toBe("en");
+    expect(translationLanguage("en")).toBe("he");
+    expect(translationLanguage(null)).toBe("he");
+    expect(explanationLanguage(undefined)).toBe("en");
+    expect(explanationLanguage("he")).toBe("he");
+  });
+});
+
+describe("translation prompts", () => {
   const english = "8/5 6/5 makes the 5-point; 24/23 13/10 loses 0.231.";
+  const hebrew = "8/5 6/5 בונה את נקודה 5; 24/23 13/10 מפסיד 0.231.";
 
   it("hands over the English text alone and asks for Hebrew only", () => {
-    const prompt = buildTranslationPrompt(english);
+    const prompt = buildTranslationPrompt(english, "he");
     expect(prompt).toContain(`<explanation>\n${english}\n</explanation>`);
     expect(prompt.endsWith("Reply with the Hebrew text only.")).toBe(true);
-    expect(TRANSLATION_SYSTEM_PROMPT).toContain("into Hebrew");
-    expect(TRANSLATION_SYSTEM_PROMPT).toContain("Copy every move in notation exactly");
-    expect(TRANSLATION_SYSTEM_PROMPT).toContain("Blue is כחול and White is לבן");
-    expect(TRANSLATION_PROMPT_VERSION).toBe("he-v1");
+    const he = TRANSLATION_PROMPTS.he;
+    expect(he.system).toContain("from English into Hebrew");
+    expect(he.system).toContain("Copy every move in notation exactly");
+    expect(he.system).toContain("Blue is כחול and White is לבן");
+    expect(he.version).toBe("he-v1");
     expect(TRANSLATION_EFFORT).toBe("low");
   });
 
+  it("hands over the Hebrew text alone and asks for English only", () => {
+    const prompt = buildTranslationPrompt(hebrew, "en");
+    expect(prompt).toContain(`<explanation>\n${hebrew}\n</explanation>`);
+    expect(prompt.endsWith("Reply with the English text only.")).toBe(true);
+    const en = TRANSLATION_PROMPTS.en;
+    expect(en.system).toContain("from Hebrew into English");
+    expect(en.system).toContain("Copy every move in notation exactly");
+    expect(en.system).toContain("כחול is Blue and לבן is White");
+    expect(en.version).toBe("en-v1");
+  });
+
   it("hashes the version, the system prompt and the prompt", () => {
-    const a = translationSha256(buildTranslationPrompt(english));
+    const a = translationSha256(buildTranslationPrompt(english, "he"), "he");
     expect(a).toMatch(/^[0-9a-f]{64}$/);
-    expect(translationSha256(buildTranslationPrompt(english))).toBe(a);
-    expect(translationSha256(buildTranslationPrompt("Other text."))).not.toBe(a);
+    expect(translationSha256(buildTranslationPrompt(english, "he"), "he")).toBe(a);
+    expect(translationSha256(buildTranslationPrompt("Other text.", "he"), "he")).not.toBe(a);
+    // The same prompt text under the other direction's version and system prompt is another prompt.
+    expect(translationSha256(buildTranslationPrompt(english, "he"), "en")).not.toBe(a);
   });
 
   it("keeps plain prose: no echoed tags, labels or markdown", () => {
@@ -118,6 +160,7 @@ describe("Hebrew translation prompt", () => {
     const isolate = (s: string) => String.fromCharCode(0x2066) + s + String.fromCharCode(0x2069);
     expect(cleanTranslation(`המהלך 23/18 9/8 (${lrm}-0.068) ו-${isolate("13/7 8/7")}`)).toBe("המהלך 23/18 9/8 (-0.068) ו-13/7 8/7");
     expect(cleanTranslation(`מפסי${String.fromCharCode(0xad)}ד 0.102`)).toBe("מפסיד 0.102");
+    expect(cleanTranslation("<translation>\nTranslation: Blue plays **8/5 6/5**.\n</translation>")).toBe("Blue plays 8/5 6/5.");
   });
 });
 

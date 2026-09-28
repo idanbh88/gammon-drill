@@ -1,6 +1,6 @@
 # Backgammon Trainer — specification and decision log
 
-Last updated 2026-09-24. Repository: https://github.com/idanbh88/gammon-drill (branch `main`). `CLAUDE.md` is the short operational guide; this is the reference.
+Last updated 2026-09-27. Repository: https://github.com/idanbh88/gammon-drill (branch `main`). `CLAUDE.md` is the short operational guide; this is the reference.
 
 ## 1. Goal
 
@@ -8,7 +8,7 @@ A web app for practising backgammon positions (checker plays and cube decisions)
 spirit of Robertie's *501 Essential Backgammon Problems*, on an open data pipeline: positions
 come in as XGIDs, GNU Backgammon evaluates them, the app quizzes the user and tracks mistakes.
 Problem sets are JSON files and progress lives in the browser's `localStorage`; explanations
-written by Claude (in English, each with a Hebrew translation shown under it) and the user's
+written by Claude (in Hebrew, each with an English translation shown under it) and the user's
 imported matches (Backgammon Galaxy `.mat` exports, replayed and analysed by gnubg) live in
 `data/store.sqlite`, a SQLite file the app and the pipeline share. Backgammon Galaxy quiz sets (picture-based multiple choice) can be imported as lessons;
 they live, with their pictures, in a separate git-ignored database under `data/lessons/`.
@@ -26,7 +26,7 @@ the offline pipeline; GNU Backgammon 1.08 as the engine.
 | 1 | SVG board, quiz shell, five seed problems, session stats | done 2026-09-02 |
 | 2 | `analyze.py` (gnubg), `classify.py` (rule-based tags), `import_forum.py` | done 2026-09-03; forum import not yet tried on a live forum |
 | 3 | filters, spaced repetition with per-category accuracy, explanations | done 2026-09-03; explanations moved from a batch script to on-demand generation in the app with a SQLite store the same day (§ 5, § 6) |
-| 4 | match review: upload a Backgammon Galaxy `.mat` export, replay it, evaluate the user's decisions with gnubg, list the errors with explanations on demand | done 2026-09-04 (§ 5 match store, § 6 Matches, § 8 `import_match.py`); no Galaxy export with cube actions seen yet |
+| 4 | match review: upload a Backgammon Galaxy `.mat` export, replay it, evaluate the user's decisions with gnubg, list the errors with explanations on demand | done 2026-09-04 (§ 5 match store, § 6 Matches, § 8 `import_match.py`); cube actions checked on a real export 2026-09-25 |
 | 5 | lessons: import Backgammon Galaxy quiz sets (picture-based multiple choice) with all their pictures, play each set in order with the author's analysis, score and retry mistakes | done 2026-09-11 (§ 5 lesson store, § 6 Lessons, § 8 `import_lessons.py`); 24 sets, 423 problems imported; the positions are pictures only (§ 9 item 9) |
 | 6 | play gnubg: matches or money sessions against gnubg at 2-ply (best move, with the cube), click-to-move board, gnubg's verdict after every decision, PR for both sides, every error automatically in the quiz ("My mistakes") with the move played always offered | done 2026-09-24 (§ 5 play store, PR, mistakes; § 6 Play; § 8 `gnubg_server.py`) |
 | 7 | study extras chosen 2026-09-24: where I lose equity (PR trend, loss by category / cube error), try again before the answer, play on from any position | planned (§ 9 items 11–13) |
@@ -93,8 +93,8 @@ interface Problem {
   answers: Answer[];             // ranked best first, at least two
   categories: Category[];        // at least one, from the taxonomy in § 7
   explanation: string;           // hand-written fallback; generated text is overlaid from the store
-  explanationMeta?: { id?: number; model: string; generatedAt: string; effort?: string };   // set from the store row (id = explanations.id)
-  explanationHebrew?: { explanationId: number; text: string; model: string; generatedAt: string };   // newest translation of that row (never in JSON)
+  explanationMeta?: { id?: number; model: string; generatedAt: string; effort?: string; language?: "he" | "en" };   // set from the store row (id = explanations.id; no language = English)
+  explanationTranslation?: { explanationId: number; language: "he" | "en"; text: string; model: string; generatedAt: string };   // newest translation of that row into the other language (never in JSON)
   source?: string;
   analysis?: { engine: "gnubg" | "manual"; plies?; positionClass?; analysedAt? };
   features?: Record<string, number | boolean | string>;   // classifier features
@@ -108,19 +108,22 @@ checker answer is a legal play, cube answer ids come from the right set.
 
 ### Explanation store
 
-`data/store.sqlite` (schema in `src/lib/store-schema.ts`, `meta.schema_version` = 5) holds every
+`data/store.sqlite` (schema in `src/lib/store-schema.ts`, `meta.schema_version` = 6) holds every
 explanation ever generated, in table `explanations`: xgid, problem id (a quiz problem id or a
 match decision id), requested and served model, prompt version and SHA-256 of the full prompt,
 the cleaned text and the model's raw text, generation time, token counts, request id,
-whether a server-side fallback served it, and the effort level it was asked for (`effort`, since
-schema v4; NULL for older rows). Rows are inserted, never updated or deleted, so
-regenerating keeps the old text. Table `translations` (schema v5) holds the Hebrew
-translations the same way: the explanation row translated (`explanation_id`), `language`
-(`he`), the text and raw text, and the same provenance columns (models, prompt version and
-hash, time, tokens, request id, fallback, effort); appended, never updated or deleted. The
-loader (`src/lib/problems.ts`) overlays the newest row per XGID onto `explanation` /
-`explanationMeta` (with the row id) and the newest Hebrew translation of that same row onto
-`explanationHebrew`, so a regenerated explanation never shows the old text's translation; the
+whether a server-side fallback served it, the effort level it was asked for (`effort`, since
+schema v4; NULL for older rows) and the language of the text (`language`, since schema v6:
+`he` for the explanations written in Hebrew from 2026-09-27 on, NULL for the English ones
+before). Rows are inserted, never updated or deleted, so regenerating keeps the old text.
+Table `translations` (schema v5) holds the translations the same way: the explanation row
+translated (`explanation_id`), `language` (the language translated into: `en` for a Hebrew
+explanation, `he` for an older English one), the text and raw text, and the same provenance
+columns (models, prompt version and hash, time, tokens, request id, fallback, effort);
+appended, never updated or deleted. The loader (`src/lib/problems.ts`) overlays the newest row
+per XGID onto `explanation` / `explanationMeta` (with the row id and language) and the newest
+translation of that same row into the other language onto `explanationTranslation`, so a
+regenerated explanation never shows the old text's translation; the
 JSON field stays as a hand-written fallback, and the match review and the play screen show the
 same newest-per-XGID text. The app opens the file with Node's built-in `node:sqlite`; Python
 uses the standard library and reads `SCHEMA_VERSION` / `SCHEMA_SQL` / `ADDED_COLUMNS` out of the
@@ -137,11 +140,12 @@ The importer (`pipeline/import_match.py`, run by the app's upload route or by ha
 three more tables:
 
 - `matches`: site, site match id (unique together), player names, match length (0 = money),
-  played-at, file name and SHA-256, the raw `.mat` text, the analysed player (1), engine and
-  plies, import time.
+  played-at, file name and SHA-256, the raw `.mat` text, the analysed player (the user's side, 1
+  or 2), engine and plies, import time.
 - `games`: number, score at the start, Crawford flag, winner and points.
 - `decisions`: one row per decision of the analysed player, `decision_id` =
-  `match-<site match id>-g<game>-m<move>-<kind>` (kind `checker`, `cube` or `take`), the XGID
+  `match-<site match id>-g<game>-m<move>-<kind>` (kind `checker`, `cube` or `take`; player 2's
+  with `-p2` before the kind, `match-<id>-g1-m3-p2-checker`, as for gnubg's in play), the XGID
   before the decision (the analysed player is the acting player), dice, what was played
   (canonical notation, or `double` / `no-double` / `take` / `pass`), the matching answer id, best
   and played equity, the loss, `forced`, position class, categories, features and the ranked
@@ -303,36 +307,55 @@ the quiz offers the top four in random order.
   medium, high, extra high, max; the model's own default preselected and marked, again whenever
   the model changes: Opus 5.5 medium, the others high) and a button generate one through
   `POST /api/explain`, or regenerate an existing one; the result is inserted into the store and
-  shown at once. Under the text: "Generated by <model> at <effort> effort on <date>" (no effort
-  for explanations written before it was recorded) and, when the audit
-  (`src/lib/explain-audit.ts`) finds a number or move that is not in the problem's data,
-  "Not found in the data: …". Errors (no key, refusal, network) show in the panel.
-- **Hebrew translation** (same panel, asked for by the user, who reads Hebrew more easily):
-  every explanation is shown in English with its Hebrew translation under it, right to left.
-  Right after a new explanation arrives the panel asks `POST /api/explain/translate` for its
-  translation, with the model picked in the panel and effort `low` (`TRANSLATION_EFFORT`);
-  "מתרגם לעברית…" shows meanwhile, and the result is inserted into `translations` and shown.
-  An explanation stored without one (every explanation written before 2026-09-24, or one
-  whose translation failed) gets a "Translate to Hebrew" button instead: nothing is translated
-  on page load. The prompt (`src/lib/translate.ts`, `TRANSLATION_PROMPT_VERSION` he-v1) asks for
-  a faithful translation in natural Hebrew that copies moves in notation and every number
-  exactly, calls Blue כחול and White לבן, and adds the English term in parentheses the first
-  time a term is usually said in English. The text is cleaned like an explanation, plus echoed
-  tags, a leading "תרגום:" label and invisible marks (bidi controls, soft hyphens; the display
-  drops them too, for rows stored earlier). The Hebrew paragraph is `dir="rtl"`;
-  `src/lib/rtl.ts` isolates each run of moves ("13/7 8/7", "bar/21* 24/21") and each signed
-  number ("−0.045") in `<bdi dir="ltr">`, because the bidi algorithm would otherwise reorder
-  them ("8/7 13/7", "*21/bar"). Under it: "Hebrew translation by <model> on <date>" and, when
-  its numbers or moves differ from the English (`translationMismatches`), "The Hebrew differs
-  from the English in: …". `GET /api/explain/translate?explanationId=` shows the prompt
-  without calling the API.
+  shown at once. The model writes the explanation in Hebrew (§ 8); explanations written before
+  2026-09-27 are English. Under the text: "Generated in <language> by <model> at <effort> effort
+  on <date>" (no effort for explanations written before it was recorded) and, when the audit
+  (`src/lib/explain-audit.ts`, which reads Hebrew the same way: moves stay in notation, numbers
+  in digits) finds a number or move that is not in the problem's data, "Not found in the data:
+  …". Errors (no key, refusal, network) show in the panel.
+- **Translation** (same panel; the user reads Hebrew more easily): every explanation is shown in
+  both languages, the Hebrew on top, right to left, and the English under it, whichever of the
+  two is the original. Right after a new explanation arrives the panel asks
+  `POST /api/explain/translate` for its English translation, with the model picked in the panel
+  and effort `low` (`TRANSLATION_EFFORT`); "Translating into English…" shows meanwhile, and the
+  result is inserted into `translations` and shown. The route takes the direction from the
+  explanation's language, so the English explanations written before 2026-09-27 keep (and can
+  still get) Hebrew translations. An explanation stored without a translation (one whose
+  translation failed) gets a "Translate to English" (or, for an older one, "Translate to
+  Hebrew") button instead: nothing is translated on page load. The prompts
+  (`src/lib/translate.ts`, `TRANSLATION_PROMPTS`: `en-v1` Hebrew into English, `he-v1` English
+  into Hebrew) ask for a faithful, natural translation that copies moves in notation and every
+  number exactly; `en-v1` renders כחול / לבן as Blue / White and a Hebrew term with its English
+  in parentheses as that English term, `he-v1` calls Blue כחול and White לבן and adds the
+  English term in parentheses the first time a term is usually said in English. Texts are
+  cleaned like an explanation (markdown, a leading label such as "הסבר:", invisible marks: bidi
+  controls and soft hyphens), translations also of echoed tags and a "Translation:" label; the
+  display drops invisible marks too, for rows stored earlier. The Hebrew paragraph is
+  `dir="rtl"`; `src/lib/rtl.ts` isolates each run of moves ("13/7 8/7", "bar/21* 24/21") and each
+  signed number ("−0.045") in `<bdi dir="ltr">`, because the bidi algorithm would otherwise
+  reorder them ("8/7 13/7", "*21/bar"). Under the translation: "English translation by <model>
+  on <date>" (or "Hebrew translation …") and, when its numbers or moves differ from the original
+  (`translationMismatches`), "The English differs from the Hebrew in: … Go by the Hebrew there."
+  `GET /api/explain/translate?explanationId=` shows the prompt and its direction without calling
+  the API.
 - **My mistakes in the quiz**: the quiz draws from the problem sets and the user's own mistakes
   (§ 5 My mistakes). A mistake is marked "My mistake"; after answering, the reveal tags the move
   played in the game ("in your game"), a line says where it was played and what it cost, and a
   button takes it out of the quiz (or puts it back).
-- **Filters** (panel above the board, remembered in `localStorage`): source (all, problem sets,
-  my mistakes), category (any of the selected), type, difficulty band. Changing filters re-picks
-  when the current problem no longer matches or was already answered.
+- **Filters and order** (panel above the board, both remembered in `localStorage`): source
+  (all, problem sets, my mistakes), mistakes (All, "Errors only": the move played lost 0.02 to
+  0.08, or "Blunders only": 0.08 or more; one at a time, and choosing a size leaves only the
+  user's own mistakes of that size, named on the collapsed panel too), progress (All, or "Not
+  tried yet": only problems never answered in this browser's attempt log, so each one answered
+  leaves the pool; when none is left the quiz says so and offers the tried ones), category (any of the selected), type, difficulty band. Changing filters re-picks
+  when the current problem no longer matches or was already answered. The order (its own row,
+  kept when the filters are reset): "New first" puts never-answered problems before everything
+  else, newest first: the mistakes of the match imported or played last (highest match id) in
+  game order, then the match before it, and the problem sets after every match; "Random"
+  replaces the schedule with a random pick among the matching problems, due or not, dealt like a
+  shuffled deck (each once before any comes back, never the same twice in a row); the two combine
+  (new ones first, newest match first but shuffled within it, then the rest at random). Changing the order re-picks an
+  unanswered problem at once. The collapsed panel names a non-default order.
 - **Play** (`/play`): start a match against gnubg (1 to 25 points, or a money session with the
   Jacoby rule on or off) or go back to one (list with score, state, the user's PR and errors).
   gnubg starts in the background when the page opens. A match (`/play/<id>`): the board with the
@@ -368,13 +391,19 @@ the quiz offers the top four in random order.
   14, 30 days. Next pick order: lapsed and due ("Again"), then due reviews most overdue first
   ("Review"), then never-seen ("New"); when nothing is due, the problem due soonest
   ("Ahead of schedule"). The previous problem is not repeated unless it is the only candidate.
+  With "New first" or "Random" (`pickNext` options, § Filters and order) the badge still names
+  the problem's state; answers are recorded and scheduled the same way.
 - **Stats** (`/stats`): overall accuracy and average loss, per-category table (problems, due,
   attempts, accuracy, average loss), last ten mistakes, reset.
 - **Positions** (`/board`): every problem rendered, for eyeballing the board renderer.
-- **Matches** (`/matches`): upload a Backgammon Galaxy `.mat` export (the user must be Player 1,
-  the left column). `POST /api/matches/import` saves it under `data/matches/`, runs
-  `uv run import_match.py <file> --json --player 1` in `pipeline/` and streams the importer's
-  NDJSON events back, which the page shows as a progress log; the list (opponent, length,
+- **Matches** (`/matches`): upload a Backgammon Galaxy `.mat` export. The user can be either
+  player: Galaxy names an export `<you>_<opponent>_<ddmmyyyy>_<match id>.mat` with the downloader
+  first, whichever column they played in, and the importer reads the user's side from that name;
+  the form's "You are" choice (Player 1 = left column, 2 = right) is for a renamed file, which is
+  refused without it. `POST /api/matches/import` saves it under `data/matches/` (keeping the
+  name), runs `uv run import_match.py <file> --json --player auto|1|2` in `pipeline/` and
+  streams the importer's NDJSON events back, which the page shows as a progress log (naming the
+  player whose decisions are evaluated); the list (opponent, length,
   result, decisions, errors, blunders, total loss, plies) refreshes when it finishes. A match
   page (`/matches/<id>`) shows, game by game, every error: the board before the decision (Blue
   = the user), the question, "You played … −loss · best …", gnubg's ranking with the played
@@ -401,8 +430,9 @@ the quiz offers the top four in random order.
   the score, the mistakes, "Retry my mistakes" and "Start over".
 - **Storage**: `bg-trainer/attempts/v1` holds `{ problemId, answerId, equityLoss, correct, at }`
   entries (a mistake's problem id is its decision id); `bg-trainer/play/v1` holds the play
-  screen's animation speed; `bg-trainer/filters/v2` holds the filters
-  (v1 had no source and is carried over on first load); `bg-trainer/lessons/v1` holds
+  screen's animation speed; `bg-trainer/filters/v4` holds the filters
+  (v3 had no progress, v2 no mistake size either, v1 no source either; the newest older one is
+  carried over on first load); `bg-trainer/quiz-order/v1` holds `{ newFirst, random }`; `bg-trainer/lessons/v1` holds
   `{ attempts: [{ setKey, problemId, choiceId, correct, loss, retry, at }], runs: { <quiz id>:
   <start of the current run> } }`. A lesson score counts the first answer to each problem in the
   current run; answers in a "retry my mistakes" round (`retry`) can mark a mistake fixed but do
@@ -438,9 +468,13 @@ rules; a problem can carry several tags and always gets at least one. The featur
 - **Explanations** are no longer a pipeline step (`explain.py` existed until 2026-09-03).
   `src/app/api/explain/route.ts` builds the prompt (`src/lib/explain.ts`: question, position
   from Blue's side, ranked answers with equities / losses / probabilities, features;
-  `PROMPT_VERSION` v3 asks for 3–5 sentences of about 120 words and, for a match decision,
-  adds a paragraph naming the move that was played and its loss), calls the Anthropic
-  TypeScript SDK (`src/lib/claude.ts`, shared with the Hebrew translation route, which uses the
+  `PROMPT_VERSION` v4 asks for 3–5 sentences of about 120 words written in Hebrew, natural
+  rather than translated, with moves in the data's notation, numbers in digits, Blue כחול and
+  White לבן, and an English term in parentheses only where the Hebrew one may be unfamiliar;
+  the data and the instructions stay English; v1–v3 asked for English. For a match decision it
+  adds a paragraph naming the move that was played and its loss), records the language
+  (`EXPLANATION_LANGUAGE`, `he`), calls the Anthropic
+  TypeScript SDK (`src/lib/claude.ts`, shared with the translation route, which uses the
   same request shape at effort `low`), streamed (`max_tokens` 16000, 64000 at xhigh and max,
   where the thinking can run long; no `thinking` parameter; `output_config.effort` always sent,
   the chosen level or the model's default from `explain-models.ts`; `fallbacks: "default"` with
@@ -452,8 +486,11 @@ rules; a problem can carry several tags and always gets at least one. The featur
 - **import_forum.py**: Discourse threads through their JSON API (with like counts), other
   pages by regex; outputs a positions file for `analyze.py` and a JSON of candidate replies.
 - **import_match.py**: `.mat` files, folders or globs (expanded by the script, PowerShell does
-  not); parses (`bgpipeline/mat.py`), replays (`replay.py`), evaluates the analysed player's
-  decisions with one `run_gnubg` batch, scores them (`match_score.py`) and writes the match
+  not); parses (`bgpipeline/mat.py`; Galaxy's `Losses N point(s)` beside the winner's `Wins`
+  after a resignation is read as the other side winning N), finds the user's side (`--player auto`, the default: the
+  player Galaxy's file name puts first, `user_player`; `--player 1|2` overrides, and a file name
+  without the two names is refused), replays (`replay.py`), evaluates the user's decisions with
+  one `run_gnubg` batch, scores them (`match_score.py`) and writes the match
   store tables (`store.py`). Skips matches already in the store unless `--replace`. `--json`
   prints NDJSON progress events (`start`, `parsed`, `gnubg`, `warning`, `done`, `skipped`,
   `error`) for the app; `--raw-out` / `--raw-in` record and reuse gnubg's raw output (the
@@ -510,10 +547,10 @@ without further briefing. The original brief is in `docs/BRIEF.md`.
 7. **Deeper analysis for hard problems.** Re-analyse problems with gap < 0.03 at 3-ply (or a
    gnubg rollout) and record `plies` in `analysis`. Done when the pipeline can re-run a
    subset by id and merge results without touching explanations.
-8. **Match import, cube actions.** The Galaxy `.mat` importer is done (2026-09-04) but the only
-   export seen so far is a 1-point match without cube actions; the parser follows gnubg's rules
-   for `Doubles => N` / `Takes` / `Drops` and refuses unknown records. Done when a longer Galaxy
-   export with a double has been imported and added to `pipeline/tests/fixtures/`.
+8. **Match import, cube actions.** Done 2026-09-25: Galaxy match 47133758 (3 points, a double
+   and drop, a double by the right column, a double and take) replays as gnubg's rules for
+   `Doubles => N` / `Takes` / `Drops` expect and is `pipeline/tests/fixtures/
+   cjdjensnefff_brickier_25092026_47133758.mat`; it is also the fixture for the user as Player 2.
 9. **Lesson positions as XGIDs.** Lesson pictures are XG-style diagrams with a fixed layout, so
    an image reader could recover each position (checkers per point, bar, borne off, cube,
    dice, score). That would give lessons the board, pip counts, gnubg analysis, categories and
@@ -544,7 +581,7 @@ without further briefing. The original brief is in `docs/BRIEF.md`.
    started position plays to the end with correct rules (tests with scripted dice) and the
    buttons work in the browser.
 14. **Opponent PR on Galaxy matches** (asked 2026-09-24, not chosen for phase 7): analyse
-   player 2 too (`import_match.py --player both`, ids with `-p2` as for gnubg, about twice the
+   the opponent too (`import_match.py --player both`, player 2's ids already carry `-p2`, about twice the
    gnubg time), show their PR next to the user's and compare it with the PR Galaxy shows for
    the same match. Done when a re-imported match shows both PRs and the ids of player 1 are
    unchanged.
@@ -583,7 +620,7 @@ also break the quiz loader, which reads every top-level `data/*.json` as a probl
 | 2026-09-03 | Python `explain.py` removed | one prompt implementation; the app is the only caller of the Anthropic API |
 | 2026-09-03 | Fable 5.1 preselected for the hard band (gap < 0.03), Opus 5 otherwise | the hardest positions get the strongest model; the user still clicks |
 | 2026-09-04 | Matches are uploaded in the app; the route spawns the Python importer and streams its progress | no terminal needed; gnubg and the replay stay in the pipeline, the importer also works as a CLI |
-| 2026-09-04 | Only Player 1's decisions are analysed (the user is always Player 1 in Galaxy exports) | halves gnubg time; `--player 2` exists for other files |
+| 2026-09-04 | Only the user's decisions are analysed | halves gnubg time |
 | 2026-09-04 | Own `.mat` parser and replay (gnubg's importer rules, the existing move generator) instead of gnubg's `import mat` + `analyse match` | every XGID is exact and testable offline; gnubg is only asked the questions `analyze.py` already asks |
 | 2026-09-04 | Checker plays and cube decisions are evaluated, including the pre-roll "should I double?" whenever the cube is live | missed doubles are errors too; dead cubes are skipped so gnubg never reports a missing cube analysis |
 | 2026-09-04 | Error thresholds 0.02 / 0.08 (XG style) | the familiar error / blunder scale; the page defaults to errors only |
@@ -613,11 +650,17 @@ also break the quiz loader, which reads every top-level `data/*.json` as a probl
 | 2026-09-24 | The quiz always offers the move played in the game | the tempting wrong answer is the one worth practising against |
 | 2026-09-24 | Take/pass answers carry the responder's probabilities | gnubg reports the doubler's; the flip applies to the pipeline too (no stored data had take decisions yet) |
 | 2026-09-24 | Filters moved to `bg-trainer/filters/v2` (adds the source), v1 carried over on first load | the storage convention: a shape change gets a new key and a migration |
+| 2026-09-25 | Quiz: a mistake-size filter (errors 0.02–0.08, blunders ≥ 0.08, exclusive bands) in `bg-trainer/filters/v3`; "New first" and "Random" order options in their own key | asked by the user; the bands follow the match review's thresholds, and the order is not a filter, so resetting filters keeps it. Random deals a shuffled deck so a small pool does not repeat |
+| 2026-09-26 | "New first" serves the match added last first, in game order, instead of a random unanswered problem | the user uploads matches to study them next: picked at random, a fresh upload's mistakes were lost among older unanswered ones |
+| 2026-09-27 | The mistake-size chips became one choice: All, Errors only, Blunders only | asked by the user: two toggles did not read as "blunders only"; the stored shape is unchanged (one size in the list), a stored pair loads as All |
+| 2026-09-27 | A "Not tried yet" progress filter (`bg-trainer/filters/v4`, v3 carried over) | asked by the user; unlike "New first" it hides everything already answered, so a session goes through fresh problems only |
 | 2026-09-24 | Claude Opus 5.5 added to the explanation picker (not the default), with `fallbacks: "default"` and effort `medium` set explicitly | asked by the user; $4 / $20 per M tokens against Opus 5's $5 / $25; its API default effort is `medium` (Opus 5: `high`) and it runs broader safety classifiers, so the fallback opt-in stays on |
 | 2026-09-24 | gnubg's turn is replayed on the board from the server's events (dice, each checker gliding, hits to the bar, cube actions), at a speed the user picks, and can be skipped | asked by the user: see how the computer plays, at the pace of a human opponent; the server stays one request per action |
 | 2026-09-24 | Moving as on Backgammon Galaxy: a tap moves a checker by the first die (the higher unless the dice are swapped by pressing them), drag and drop for any other landing point, the complete play confirmed by pressing the dice | asked by the user; replaces pick-a-checker-then-a-point; entry stays constrained to prefixes of legal plays, now with the die of each step |
+| 2026-09-25 | The user's side in a `.mat` comes from Galaxy's file name (`<you>_<opponent>_…`), with a manual choice for renamed files; player 2's decision ids get `-p2` | the 2026-09-04 rule "the user is always Player 1" was wrong: Galaxy's Player 1 is not always the downloader (match 47133758 had the user as Player 2 and analysed the opponent); `-p2` keeps ids unique when both sides are analysed (backlog 14) and stops a re-imported match reusing the other side's ids |
 | 2026-09-24 | Animations are pure frame lists (`board-animation.ts`) drawn by the static Board plus a Web Animations overlay; the Board stays hook-free | testable without a browser, and the quiz, review and `/board` pages keep rendering the same board on the server |
 | 2026-09-24 | The explanation panel offers an effort level beside the model (default: the model's own), sent as `output_config.effort` and recorded in `explanations.effort` (schema v4, added to older files by `ADDED_COLUMNS` on both sides) | asked by the user; effort is the main cost / depth control on the current models, and provenance should say how an explanation was produced |
 | 2026-09-24 | Explanation requests are streamed; `max_tokens` 64000 at xhigh and max | thinking counts toward `max_tokens`, and the SDK refuses non-streamed requests above about 21K tokens |
 | 2026-09-24 | Every explanation is shown in English with a Hebrew translation under it: a second request right after a new explanation (same model as picked, effort `low`), older ones from a "Translate to Hebrew" button; translations are appended to their own table `translations`, keyed by the explanation row (schema v5) | asked by the user, who reads Hebrew more easily; translating the stored English keeps the English prompt, its audit and every earlier text as they were, works for the explanations already stored, and a failed translation never loses the explanation; nothing is generated on page load, as for explanations |
 | 2026-09-24 | The Hebrew is drawn right to left with moves and signed numbers isolated left to right (`rtl.ts`), and checked against the English for numbers and moves | the Unicode bidi algorithm scrambles notation inside Hebrew ("*21/bar"); a translation that changes a number would mislead exactly where the user relies on it |
+| 2026-09-27 | Explanations are written in Hebrew by the model (prompt v4) and translated into English (`en-v1`); `explanations.language` records the language (schema v6, NULL = the older English rows, which keep their Hebrew translations); the panel shows the Hebrew on top either way | asked by the user: the Hebrew translations read oddly ("הבר (bar)"), and written directly in Hebrew the model phrases it as a coach would; the audit works on the Hebrew as it did on the English (notation and digits are kept), the English stays as a checked reference, and old rows need no migration |

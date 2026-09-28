@@ -2,6 +2,7 @@
 for real at 0-ply."""
 
 import json
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 
 import import_match
 from bgpipeline.gnubg_runner import find_gnubg
+from bgpipeline.mat import parse_mat
 from bgpipeline.store import schema_from_ts
 
 FIXTURES = Path(__file__).with_name("fixtures")
@@ -31,6 +33,19 @@ def test_played_at():
     assert import_match.played_at("2026.13.03", "18.37") is None
 
 
+def test_user_player_from_galaxy_file_name():
+    header = parse_mat(GALAXY.read_text(encoding="utf-8")).header  # Player 1 cjdjensnefff, Player 2 dcrc2
+    assert import_match.user_player(header, "cjdjensnefff_dcrc2_03092026_45552673.mat") == 1
+    assert import_match.user_player(header, "CJDJENSNEFFF_DCRC2_03092026_45552673.MAT") == 1
+    assert import_match.user_player(header, "dcrc2_cjdjensnefff_03092026_45552673.mat") == 2
+    for renamed in ("galaxy_45552673.mat", "cjdjensnefff.mat", "cjdjensnefff_dcrc2.mat", "cjdjensnefff_someone_03092026_1.mat"):
+        assert import_match.user_player(header, renamed) is None
+    spaced = parse_mat(GALAXY.read_text(encoding="utf-8").replace('"dcrc2"', '"dc rc2"')).header
+    assert import_match.user_player(spaced, "dc_rc2_cjdjensnefff_03092026_45552673.mat") == 2  # as the app saves it
+    real = FIXTURES / "cjdjensnefff_brickier_25092026_47133758.mat"  # Player 1 brickier, the user Player 2
+    assert import_match.user_player(parse_mat(real.read_text(encoding="utf-8")).header, real.name) == 2
+
+
 def test_import_offline_then_skip_then_replace(tmp_path):
     store = tmp_path / "store.sqlite"
     events = []
@@ -38,12 +53,15 @@ def test_import_offline_then_skip_then_replace(tmp_path):
     def emit(event, **fields):
         events.append((event, fields))
 
-    summary = import_match.import_file(GALAXY, store=store, plies=0, raw_in=RAW, emit=emit)
+    galaxy_named = tmp_path / "cjdjensnefff_dcrc2_03092026_45552673.mat"
+    shutil.copy(GALAXY, galaxy_named)
+    summary = import_match.import_file(galaxy_named, store=store, plies=0, raw_in=RAW, emit=emit)
     assert summary["decisions"] == 27 and summary["forced"] == 28 and summary["unscored"] == 0 and summary["warnings"] == 0
     assert summary["errors"] == 8 and summary["blunders"] == 3 and summary["totalLoss"] == pytest.approx(0.576, abs=0.001)
     assert [e for e, _ in events] == ["start", "parsed", "done"]
     parsed = events[1][1]
     assert parsed["players"] == ["cjdjensnefff", "dcrc2"] and parsed["to_evaluate"] == 27 and parsed["games"] == 1
+    assert parsed["player"] == 1 and parsed["you"] == "cjdjensnefff"
 
     conn = sqlite3.connect(str(store))
     conn.row_factory = sqlite3.Row
@@ -71,11 +89,11 @@ def test_import_offline_then_skip_then_replace(tmp_path):
         conn.close()
 
     events.clear()
-    again = import_match.import_file(GALAXY, store=store, plies=0, raw_in=RAW, emit=emit)
+    again = import_match.import_file(GALAXY, store=store, player=1, plies=0, raw_in=RAW, emit=emit)
     assert again["skipped"] is True and [e for e, _ in events] == ["start", "skipped"]
 
     events.clear()
-    replaced = import_match.import_file(GALAXY, store=store, plies=0, raw_in=RAW, emit=emit, replace=True)
+    replaced = import_match.import_file(GALAXY, store=store, player=1, plies=0, raw_in=RAW, emit=emit, replace=True)
     assert replaced["replaced"] is True and replaced["errors"] == 8
     conn = sqlite3.connect(str(store))
     try:
@@ -85,9 +103,42 @@ def test_import_offline_then_skip_then_replace(tmp_path):
         conn.close()
 
 
-def test_main_json_output(tmp_path, capsys):
+def test_import_as_player_2(tmp_path, monkeypatch):
+    """The user in the right column: their decisions only, ids with -p2, analysed_player 2."""
+    store = tmp_path / "store.sqlite"
+    asked = []
+    monkeypatch.setattr(import_match, "run_gnubg", lambda xgids, **kw: asked.extend(xgids) or [])
+    galaxy_named = tmp_path / "dcrc2_cjdjensnefff_03092026_45552673.mat"
+    shutil.copy(GALAXY, galaxy_named)
+    events = []
+    summary = import_match.import_file(galaxy_named, store=store, plies=0, emit=lambda e, **f: events.append((e, f)))
+    parsed = dict(events)["parsed"]
+    assert parsed["player"] == 2 and parsed["you"] == "dcrc2"
+    assert summary["unscored"] == summary["decisions"] > 0  # the stub gnubg answered nothing
+    conn = sqlite3.connect(str(store))
+    conn.row_factory = sqlite3.Row
+    try:
+        assert conn.execute("SELECT analysed_player FROM matches").fetchone()[0] == 2
+        rows = conn.execute("SELECT * FROM decisions ORDER BY id").fetchall()
+        assert rows and all(r["player"] == 2 and "-p2-" in r["decision_id"] for r in rows)
+        assert rows[0]["decision_id"] == "match-45552673-g1-m1-p2-checker" and rows[0]["played"] == "24/20 13/8"
+        assert set(asked) == {r["xgid"] for r in rows if not r["forced"]}
+    finally:
+        conn.close()
+
+
+def test_renamed_file_needs_the_player(tmp_path, capsys):
     store = tmp_path / "store.sqlite"
     code = import_match.main([str(GALAXY), "--store", str(store), "--plies", "0", "--raw-in", str(RAW), "--json"])
+    assert code == 4
+    last = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert last["event"] == "error" and "cannot tell whether you are cjdjensnefff (Player 1) or dcrc2 (Player 2)" in last["message"]
+    assert not store.exists()  # refused before the store is opened
+
+
+def test_main_json_output(tmp_path, capsys):
+    store = tmp_path / "store.sqlite"
+    code = import_match.main([str(GALAXY), "--store", str(store), "--player", "1", "--plies", "0", "--raw-in", str(RAW), "--json"])
     assert code == 0
     lines = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
     assert [ev["event"] for ev in lines] == ["start", "parsed", "done"]
@@ -97,7 +148,7 @@ def test_main_json_output(tmp_path, capsys):
 def test_main_reports_bad_files(tmp_path, capsys):
     bad = tmp_path / "bad.mat"
     bad.write_text("5 point match\n Game 1\n A : 0   B : 0\n  1) 31: 8/5 6/6\n", encoding="utf-8")
-    code = import_match.main([str(bad), "--store", str(tmp_path / "s.sqlite"), "--raw-in", str(RAW), "--json"])
+    code = import_match.main([str(bad), "--store", str(tmp_path / "s.sqlite"), "--player", "1", "--raw-in", str(RAW), "--json"])
     assert code == 4
     lines = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
     assert lines[-1]["event"] == "error" and "illegal play" in lines[-1]["message"]
@@ -106,5 +157,5 @@ def test_main_reports_bad_files(tmp_path, capsys):
 
 @pytest.mark.skipif(find_gnubg() is None, reason="gnubg-cli not installed")
 def test_import_with_real_gnubg(tmp_path):
-    summary = import_match.import_file(GALAXY, store=tmp_path / "store.sqlite", plies=0, timeout=600)
+    summary = import_match.import_file(GALAXY, store=tmp_path / "store.sqlite", player=1, plies=0, timeout=600)
     assert summary["decisions"] == 27 and summary["unscored"] == 0

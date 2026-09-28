@@ -1,7 +1,14 @@
 "use client";
 
-import { Fragment, useId, useState } from "react";
-import type { ExplanationMeta, ExplanationPatch, ExplanationTranslation, Problem } from "@/types/problem";
+import { Fragment, useId, useState, type ReactNode } from "react";
+import {
+  translationLanguage,
+  type ExplanationLanguage,
+  type ExplanationMeta,
+  type ExplanationPatch,
+  type ExplanationTranslation,
+  type Problem,
+} from "@/types/problem";
 import { auditExplanation, translationMismatches } from "@/lib/explain-audit";
 import {
   EXPLAIN_EFFORTS,
@@ -15,10 +22,11 @@ import {
 import { ltrRuns } from "@/lib/rtl";
 
 const EFFORT_LABEL: Record<ExplainEffort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" };
+const LANGUAGE_NAME: Record<ExplanationLanguage, string> = { he: "Hebrew", en: "English" };
 
 interface Props {
   problem: Problem;
-  /** Called with a new explanation (its old translation cleared), then with its Hebrew translation. */
+  /** Called with a new explanation (its old translation cleared), then with its translation. */
   onGenerated: (problemId: string, patch: ExplanationPatch) => void;
 }
 
@@ -46,14 +54,29 @@ function HebrewText({ text }: { text: string }) {
   );
 }
 
+function Prose({ language, text }: { language: ExplanationLanguage; text: string }) {
+  return language === "he" ? <HebrewText text={text} /> : <p className="whitespace-pre-line text-stone-800">{text}</p>;
+}
+
+/** The text in one language with its small print; the blocks are ruled off from each other. */
+function Block({ language, children }: { language: ExplanationLanguage; children: ReactNode }) {
+  return (
+    <div className="py-3 first:pt-0 last:pb-0" data-explanation-lang={language}>
+      {children}
+    </div>
+  );
+}
+
 /**
- * The explanation under the answer reveal, in English with its Hebrew translation below.
- * Nothing is generated on its own: a button asks /api/explain for an explanation with the chosen
- * model (Fable preselected for hard problems) and effort (the model's own default preselected,
- * again when the model changes), then /api/explain/translate for its Hebrew translation with
- * the same model; the same button regenerates both. An explanation stored without a translation
- * gets a "Translate to Hebrew" button. Mount with key={problem.id} so the selection resets per
- * problem.
+ * The explanation under the answer reveal: the Hebrew on top and the English under it. New
+ * explanations are written in Hebrew and translated into English; those written before
+ * 2026-09-27 are English with a Hebrew translation, and are shown the same way round, each text
+ * saying whether it is the original or the translation. Nothing is generated on its own: a
+ * button asks /api/explain for an explanation with the chosen model (Fable preselected for hard
+ * problems) and effort (the model's own default preselected, again when the model changes), then
+ * /api/explain/translate for its translation with the same model; the same button regenerates
+ * both. An explanation stored without a translation gets a "Translate to …" button. Mount with
+ * key={problem.id} so the selection resets per problem.
  */
 export default function ExplanationPanel({ problem, onGenerated }: Props) {
   const [model, setModel] = useState<ExplainModelId>(() => suggestedModel(problem));
@@ -66,21 +89,27 @@ export default function ExplanationPanel({ problem, onGenerated }: Props) {
   const defaultEffort = explainModel(model).defaultEffort;
 
   const hasText = problem.explanation.length > 0;
-  const audit = hasText ? auditExplanation(problem, problem.explanation) : [];
-  const explanationId = problem.explanationMeta?.id;
+  const meta = problem.explanationMeta;
+  const explanationId = meta?.id;
+  // Hand-written text has no language recorded: it is English.
+  const language = meta?.language ?? "en";
+  const target = translationLanguage(language);
   // A translation goes with the text it was made from; after a regeneration the old one is not shown.
-  const hebrew = problem.explanationHebrew?.explanationId === explanationId ? problem.explanationHebrew : undefined;
-  const mismatches = hebrew ? translationMismatches(problem.explanation, hebrew.text) : [];
+  const stored = problem.explanationTranslation;
+  const translation = stored && stored.explanationId === explanationId && stored.language === target ? stored : undefined;
+  const audit = hasText ? auditExplanation(problem, problem.explanation) : [];
+  const mismatches = translation ? translationMismatches(problem.explanation, translation.text) : [];
 
-  async function translate(id: number) {
+  async function translate(id: number, into: ExplanationLanguage) {
     setPending("translate");
     setError(null);
     try {
-      const data = await postJson<{ hebrew?: ExplanationTranslation }>("/api/explain/translate", { explanationId: id, model });
-      if (!data.hebrew) throw new Error("the response had no text");
-      onGenerated(problem.id, { explanationHebrew: data.hebrew });
+      // The server picks the direction from the explanation's language; `into` only names it here.
+      const data = await postJson<{ translation?: ExplanationTranslation }>("/api/explain/translate", { explanationId: id, model });
+      if (!data.translation) throw new Error("the response had no text");
+      onGenerated(problem.id, { explanationTranslation: data.translation });
     } catch (e) {
-      setError(`Hebrew translation failed: ${e instanceof Error ? e.message : String(e)}`);
+      setError(`${LANGUAGE_NAME[into]} translation failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setPending(null);
     }
@@ -89,32 +118,29 @@ export default function ExplanationPanel({ problem, onGenerated }: Props) {
   async function generate() {
     setPending("explain");
     setError(null);
-    let meta: ExplanationMeta;
+    let created: ExplanationMeta;
     try {
       const data = await postJson<{ explanation?: string; explanationMeta?: ExplanationMeta }>("/api/explain", { problemId: problem.id, model, effort });
       if (!data.explanation || !data.explanationMeta) throw new Error("The response had no explanation.");
-      meta = data.explanationMeta;
-      onGenerated(problem.id, { explanation: data.explanation, explanationMeta: meta, explanationHebrew: undefined });
+      created = data.explanationMeta;
+      onGenerated(problem.id, { explanation: data.explanation, explanationMeta: created, explanationTranslation: undefined });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setPending(null);
       return;
     }
     // Every new explanation is translated right away, with the same model.
-    if (meta.id !== undefined) await translate(meta.id);
+    if (created.id !== undefined) await translate(created.id, translationLanguage(created.language));
     else setPending(null);
   }
 
-  return (
-    <div className="rounded-lg border border-stone-200 bg-white p-4" data-explanation>
-      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-stone-500">Explanation</h2>
-      <p className="whitespace-pre-line text-stone-800">
-        {hasText ? problem.explanation : <span className="italic text-stone-400">No explanation yet.</span>}
-      </p>
-      {problem.explanationMeta && (
+  const original = hasText && (
+    <Block key="original" language={language}>
+      <Prose language={language} text={problem.explanation} />
+      {meta && (
         <p className="mt-2 text-xs text-stone-400">
-          Generated by {problem.explanationMeta.model}
-          {problem.explanationMeta.effort && ` at ${problem.explanationMeta.effort} effort`} on {problem.explanationMeta.generatedAt}.
+          Generated in {LANGUAGE_NAME[language]} by {meta.model}
+          {meta.effort && ` at ${meta.effort} effort`} on {meta.generatedAt}.
         </p>
       )}
       {audit.length > 0 && (
@@ -122,24 +148,46 @@ export default function ExplanationPanel({ problem, onGenerated }: Props) {
           Not found in the data: {audit.join(", ")}. Read those with care.
         </p>
       )}
-      {hebrew ? (
-        <div className="mt-3 border-t border-stone-200 pt-3" data-explanation-he>
-          <HebrewText text={hebrew.text} />
-          <p className="mt-2 text-xs text-stone-400">
-            Hebrew translation by {hebrew.model} on {hebrew.generatedAt}.
+    </Block>
+  );
+  let translated: ReactNode = null;
+  if (translation) {
+    translated = (
+      <Block key="translation" language={target}>
+        <Prose language={target} text={translation.text} />
+        <p className="mt-2 text-xs text-stone-400">
+          {LANGUAGE_NAME[target]} translation by {translation.model} on {translation.generatedAt}.
+        </p>
+        {mismatches.length > 0 && (
+          <p className="mt-1 text-xs text-amber-700" data-translation-check>
+            The {LANGUAGE_NAME[target]} differs from the {LANGUAGE_NAME[language]} in: {mismatches.join(", ")}. Go by the{" "}
+            {LANGUAGE_NAME[language]} there.
           </p>
-          {mismatches.length > 0 && (
-            <p className="mt-1 text-xs text-amber-700" data-translation-check>
-              The Hebrew differs from the English in: {mismatches.join(", ")}. Go by the English there.
-            </p>
-          )}
-        </div>
-      ) : (
-        pending === "translate" && (
-          <p dir="rtl" lang="he" className="mt-3 border-t border-stone-200 pt-3 italic text-stone-400">
+        )}
+      </Block>
+    );
+  } else if (hasText && pending === "translate") {
+    translated = (
+      <Block key="translation" language={target}>
+        {target === "he" ? (
+          <p dir="rtl" lang="he" className="italic text-stone-400">
             מתרגם לעברית…
           </p>
-        )
+        ) : (
+          <p className="italic text-stone-400">Translating into English…</p>
+        )}
+      </Block>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-4" data-explanation>
+      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-stone-500">Explanation</h2>
+      {hasText ? (
+        // Hebrew on top and English under it, whichever of the two is the original.
+        <div className="divide-y divide-stone-200">{language === "he" ? [original, translated] : [translated, original]}</div>
+      ) : (
+        <p className="italic text-stone-400">No explanation yet.</p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
         <label htmlFor={selectId} className="text-stone-500">
@@ -187,18 +235,19 @@ export default function ExplanationPanel({ problem, onGenerated }: Props) {
           onClick={generate}
           disabled={pending !== null}
           className="rounded bg-stone-800 px-3 py-1.5 font-medium text-white hover:bg-stone-700 disabled:opacity-50"
+          title="Written in Hebrew, then translated into English"
         >
           {pending === "explain" ? `Asking ${model}…` : hasText ? "Regenerate" : "Generate explanation"}
         </button>
-        {hasText && explanationId !== undefined && !hebrew && pending === null && (
+        {hasText && explanationId !== undefined && !translation && pending === null && (
           <button
             type="button"
-            onClick={() => translate(explanationId)}
+            onClick={() => translate(explanationId, target)}
             className="rounded border border-stone-300 bg-white px-3 py-1.5 font-medium text-stone-800 hover:bg-stone-50"
-            title="Translate this explanation into Hebrew with the model picked on the left"
+            title={`Translate this explanation into ${LANGUAGE_NAME[target]} with the model picked on the left`}
             data-translate
           >
-            Translate to Hebrew
+            Translate to {LANGUAGE_NAME[target]}
           </button>
         )}
         {pending === "explain" && <span className="text-stone-400">{isSlow(model, effort) ? "This can take a minute or more." : "Usually a few seconds."}</span>}

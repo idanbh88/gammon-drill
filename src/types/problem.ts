@@ -42,6 +42,24 @@ export type CubeAnswerId = (typeof CUBE_ANSWER_IDS)[number];
 export const POSITION_CLASSES = ["contact", "race", "crashed", "bearoff", "over"] as const;
 export type PositionClass = (typeof POSITION_CLASSES)[number];
 
+/**
+ * Languages of generated explanations and their translations. Explanations are written in
+ * Hebrew, which the user reads most easily, and translated into English; those written before
+ * 2026-09-27 are English, translated into Hebrew.
+ */
+export const EXPLANATION_LANGUAGES = ["he", "en"] as const;
+export type ExplanationLanguage = (typeof EXPLANATION_LANGUAGES)[number];
+
+/** A stored language code as one of ours; none (hand-written text, rows before store schema v6) means English. */
+export function explanationLanguage(code: string | null | undefined): ExplanationLanguage {
+  return code === "he" ? "he" : "en";
+}
+
+/** The language an explanation is translated into: English for a Hebrew one, Hebrew for an English one. */
+export function translationLanguage(original: string | null | undefined): ExplanationLanguage {
+  return explanationLanguage(original) === "he" ? "en" : "he";
+}
+
 export interface Probs {
   win: number;
   winGammon: number;
@@ -91,8 +109,8 @@ export interface Problem {
   features?: Record<string, number | boolean | string>;
   /** Provenance of a generated explanation (Phase 3, pipeline/explain.py). */
   explanationMeta?: ExplanationMeta;
-  /** The Hebrew translation of the generated explanation, from the store; never in data/*.json. */
-  explanationHebrew?: ExplanationTranslation;
+  /** The translation of the generated explanation (English for a Hebrew one), from the store; never in data/*.json. */
+  explanationTranslation?: ExplanationTranslation;
   /** Set on the user's own decisions in the quiz ("My mistakes"); never in data/*.json. */
   origin?: ProblemOrigin;
 }
@@ -116,6 +134,8 @@ export interface ExplanationMeta {
   model: string;
   /** output_config.effort the explanation was generated with (not recorded before 2026-09-24). */
   effort?: string;
+  /** The language the text is written in; absent means English (hand-written text). Stored rows always set it. */
+  language?: ExplanationLanguage;
   /** ISO date */
   generatedAt: string;
 }
@@ -124,15 +144,17 @@ export interface ExplanationMeta {
 export interface ExplanationTranslation {
   /** The explanations row it translates: it belongs with that text only. */
   explanationId: number;
+  /** The language translated into. */
+  language: ExplanationLanguage;
   text: string;
   model: string;
   /** ISO date */
   generatedAt: string;
 }
 
-/** What the explanation panel hands its parent: a new explanation (with `explanationHebrew`
+/** What the explanation panel hands its parent: a new explanation (with `explanationTranslation`
  * cleared, the old translation belongs to the old text) or a translation of the one on show. */
-export type ExplanationPatch = Partial<Pick<Problem, "explanation" | "explanationMeta" | "explanationHebrew">>;
+export type ExplanationPatch = Partial<Pick<Problem, "explanation" | "explanationMeta" | "explanationTranslation">>;
 
 export interface ProblemSet {
   name: string;

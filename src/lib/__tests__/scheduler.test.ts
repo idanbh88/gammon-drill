@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { Problem } from "@/types/problem";
-import { cardState, cardStates, categoryStats, dueCount, humanizeInterval, INTERVALS_MS, pickNext } from "@/lib/scheduler";
+import {
+  addedRank,
+  cardState,
+  cardStates,
+  categoryStats,
+  dueCount,
+  humanizeInterval,
+  INTERVALS_MS,
+  markSeen,
+  pickNext,
+  stateReason,
+} from "@/lib/scheduler";
 import type { Attempt } from "@/lib/storage";
 
 const MIN = 60_000;
@@ -80,6 +91,90 @@ describe("pickNext", () => {
     const seen = new Set<string>();
     for (let i = 0; i < 50; i++) seen.add(pickNext(P, states, { now: T0, exclude: "again" })!.problem.id);
     expect(seen.has("again")).toBe(false);
+  });
+
+  it("puts never-answered problems first when asked", () => {
+    const newFirst = { newFirst: true, random: false };
+    expect(pickNext(P, states, { now: T0, rng, order: newFirst })).toMatchObject({ problem: { id: "new1" }, reason: "new" });
+    expect(pickNext(P, states, { now: T0, rng: () => 0.99, order: newFirst })?.problem.id).toBe("new1"); // in the order given
+    expect(pickNext(P, states, { now: T0, order: newFirst, exclude: "new1" })?.problem.id).toBe("new2");
+    const seenAll = P.filter((p) => !p.id.startsWith("new"));
+    expect(pickNext(seenAll, states, { now: T0, rng, order: newFirst })).toMatchObject({ problem: { id: "again" }, reason: "again" });
+  });
+
+  it("serves the match added last first, in game order, then older matches, then the problem sets", () => {
+    const mistake = (id: string, matchId: number): Problem => ({
+      ...problem(id),
+      origin: { site: "BackgammonGalaxy", matchId, opponent: "x", playedAt: null, played: "b", loss: 0.1 },
+    });
+    // as the loader lists them: problem sets, then matches newest first, game order within
+    const pool = [problem("set1"), problem("set2"), mistake("m7-g1", 7), mistake("m7-g2", 7), mistake("m5-g1", 5), mistake("again", 9)];
+    expect(pool.map(addedRank)).toEqual([-1, -1, 7, 7, 5, 9]);
+    const st = cardStates(pool, [attempt("again", false, T0 - 10 * MIN)]);
+    const newFirst = { newFirst: true, random: false };
+    const order: string[] = [];
+    let attempts: Attempt[] = [attempt("again", false, T0 - 10 * MIN)];
+    for (let i = 0; i < 5; i++) {
+      const next = pickNext(pool, cardStates(pool, attempts), { now: T0, rng: () => 0.99, order: newFirst })!;
+      expect(next.reason).toBe("new");
+      order.push(next.problem.id);
+      attempts = [...attempts, attempt(next.problem.id, true, T0)];
+    }
+    expect(order).toEqual(["m7-g1", "m7-g2", "m5-g1", "set1", "set2"]);
+    // match 9 is newer but was answered already: not "new"
+    expect(pickNext(pool, st, { now: T0, rng, order: newFirst })?.problem.id).toBe("m7-g1");
+    // with Random too: the newest match still comes first, shuffled within it
+    const both = { newFirst: true, random: true };
+    const firsts = new Set<string>();
+    for (let i = 0; i < 40; i++) firsts.add(pickNext(pool, st, { now: T0, order: both })!.problem.id);
+    expect([...firsts].sort()).toEqual(["m7-g1", "m7-g2"]);
+  });
+
+  it("deals every problem once in a random order before any comes back", () => {
+    const random = { newFirst: false, random: true };
+    let seen: Set<string> = new Set();
+    let last: string | null = null;
+    const dealt: string[] = [];
+    for (let i = 0; i < 3 * P.length; i++) {
+      const id: string = pickNext(P, states, { now: T0, order: random, seen, exclude: last })!.problem.id;
+      seen = markSeen(seen, P, id);
+      last = id;
+      dealt.push(id);
+    }
+    for (let round = 0; round < 3; round++) {
+      expect(new Set(dealt.slice(round * P.length, (round + 1) * P.length)).size).toBe(P.length);
+    }
+    expect(dealt.every((id, i) => i === 0 || id !== dealt[i - 1])).toBe(true);
+    // due or not: "later" (not due for a day) is dealt too, and says so
+    const later = pickNext([problem("later")], states, { now: T0, order: random });
+    expect(later).toMatchObject({ problem: { id: "later" }, reason: "ahead" });
+  });
+
+  it("combines new first with a random order", () => {
+    const both = { newFirst: true, random: true };
+    expect(pickNext(P, states, { now: T0, rng, order: both })?.reason).toBe("new");
+    const newOnes = new Set<string>();
+    for (let i = 0; i < 40; i++) newOnes.add(pickNext(P, states, { now: T0, order: both })!.problem.id);
+    expect([...newOnes].sort()).toEqual(["new1", "new2"]); // problem sets: shuffled too
+    const seenAll = P.filter((p) => !p.id.startsWith("new"));
+    const picked = new Set<string>();
+    for (let i = 0; i < 60; i++) picked.add(pickNext(seenAll, states, { now: T0, order: both })!.problem.id);
+    expect([...picked].sort()).toEqual(["again", "later", "review"]);
+  });
+
+  it("names a problem's state", () => {
+    expect(stateReason(states.get("new1")!, T0)).toBe("new");
+    expect(stateReason(states.get("again")!, T0)).toBe("again");
+    expect(stateReason(states.get("review")!, T0)).toBe("review");
+    expect(stateReason(states.get("later")!, T0)).toBe("ahead");
+  });
+
+  it("starts a new round once the whole pool was dealt", () => {
+    const pool = [problem("a"), problem("b")];
+    expect([...markSeen(new Set(), pool, "a")]).toEqual(["a"]);
+    expect([...markSeen(new Set(["a"]), pool, "b")].sort()).toEqual(["a", "b"]);
+    expect([...markSeen(new Set(["a", "b"]), pool, "a")]).toEqual(["a"]);
+    expect([...markSeen(new Set(["a", "gone"]), pool, "b")].sort()).toEqual(["a", "b", "gone"]);
   });
 });
 

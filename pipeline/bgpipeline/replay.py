@@ -43,7 +43,8 @@ class Decision:
 
     @property
     def decision_id(self) -> str:
-        return f"g{self.game}-m{self.move_no}-{self.kind}"
+        """``g1-m3-checker``; player 2's carry ``-p2`` (``g1-m3-p2-checker``), as on the play screen."""
+        return f"g{self.game}-m{self.move_no}{'-p2' if self.player == 2 else ''}-{self.kind}"
 
 
 @dataclass
@@ -127,13 +128,15 @@ def replay(match: MatMatch, player: int = 1) -> Replay:
         records = game.half_moves
 
         for idx, hm in enumerate(records):
+            if hm.action == "loss":
+                hm = replace(hm, action="win", player=opponent(hm.player))  # Galaxy's "Losses N points"
             p = hm.player
             move_no = hm.move_no or 0
             if winner is not None:
                 # After a drop the file still says who won; anything else is out of place.
                 if hm.action == "win" and hm.player == winner:
                     if hm.points is not None and hm.points != points:
-                        raise MatError(hm.line_no, f"the file says {hm.points} point(s) but the drop gives {points}")
+                        raise MatError(hm.line_no, f"the file says {hm.points} point(s) but the game already ended for {points}")
                     continue
                 raise MatError(hm.line_no, "a record after the game ended")
             if hm.action == "move":
@@ -153,7 +156,7 @@ def replay(match: MatMatch, player: int = 1) -> Replay:
                     pos = replace(pos, turn=opponent(p), dice=None)
                     continue
                 if not hm.plays:
-                    if all(later.action == "win" for later in records[idx + 1 :]):
+                    if all(later.action in ("win", "loss") for later in records[idx + 1 :]):
                         break  # rolled, then resigned
                     raise MatError(hm.line_no, f"{len(plays)} legal plays with {_dice_text(hm.dice)} but no play is recorded")
                 try:

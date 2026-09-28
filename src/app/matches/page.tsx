@@ -1,6 +1,6 @@
 import Link from "next/link";
 import UploadMatch from "@/components/UploadMatch";
-import { formatPlayedAt, matchResult, THRESHOLDS } from "@/lib/matches";
+import { formatPlayedAt, formatScore, matchResult, THRESHOLDS } from "@/lib/matches";
 import { DATA_DIR } from "@/lib/problems";
 import { readMatches, readMatchRatings } from "@/lib/store";
 
@@ -61,7 +61,7 @@ export default async function MatchesPage() {
                     </td>
                     <td className="px-3 py-2">{m.matchLength > 0 ? `${m.matchLength} pt` : "money"}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {r.score1}–{r.score2} {outcome}
+                      {formatScore(m.analysedPlayer, r.score1, r.score2)} {outcome}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{s?.decisions ?? 0}</td>
                     <td className="px-3 py-2 text-right font-mono">{s?.errors ?? 0}</td>

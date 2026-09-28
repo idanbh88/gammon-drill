@@ -4,6 +4,7 @@
  * the attempts in localStorage, nothing else is stored.
  */
 import { CATEGORIES, type Category, type Problem } from "@/types/problem";
+import type { QuizOrder } from "./quiz-order";
 import type { Attempt } from "./storage";
 
 const MINUTE = 60_000;
@@ -72,8 +73,15 @@ export function dueCount(problems: readonly Problem[], states: Map<string, CardS
   return n;
 }
 
-/** Why a problem was chosen: answered wrong last time, a scheduled review, never seen, or nothing is due. */
+/** Why a problem was chosen (and what it is): answered wrong last time and due, a due review, never seen, or not due yet. */
 export type PickReason = "again" | "review" | "new" | "ahead";
+
+/** A problem's reason from its state alone, for picks that ignore the schedule. */
+export function stateReason(s: CardState, now: number): PickReason {
+  if (s.attempts === 0) return "new";
+  if (s.due > now) return "ahead";
+  return s.lastCorrect ? "review" : "again";
+}
 
 export interface Pick {
   problem: Problem;
@@ -81,15 +89,34 @@ export interface Pick {
   due: number;
 }
 
+export interface PickOptions {
+  now?: number;
+  /** The problem just shown, not repeated unless it is the only one. */
+  exclude?: string | null;
+  rng?: () => number;
+  /** Default: the schedule alone. */
+  order?: QuizOrder;
+  /** Random order: the problems already dealt in this round (see `markSeen`). */
+  seen?: ReadonlySet<string>;
+}
+
 /**
- * Choose the next problem: lapsed ones first, then due reviews (most overdue first), then
- * new ones; when nothing is due, the one due soonest. `exclude` avoids an immediate repeat.
+ * How recently a problem was added, for "New first": the user's own mistakes by match (a higher
+ * match id was imported or played later), the problem sets below every match.
  */
-export function pickNext(
-  problems: readonly Problem[],
-  states: Map<string, CardState>,
-  opts: { now?: number; exclude?: string | null; rng?: () => number } = {},
-): Pick | null {
+export function addedRank(p: Problem): number {
+  return p.origin ? p.origin.matchId : -1;
+}
+
+/**
+ * Choose the next problem. By the schedule: lapsed ones first, then due reviews (most overdue
+ * first), then new ones; when nothing is due, the one due soonest. `order.newFirst` puts new
+ * ones before all that, the last match added first (`addedRank`), in the order given within it
+ * (the loader lists a match's decisions in game order) or at random with `order.random`;
+ * `order.random` otherwise replaces the schedule with a random problem not yet dealt in this
+ * round (`seen`), due or not.
+ */
+export function pickNext(problems: readonly Problem[], states: Map<string, CardState>, opts: PickOptions = {}): Pick | null {
   const now = opts.now ?? Date.now();
   const rng = opts.rng ?? Math.random;
   let pool = problems;
@@ -103,13 +130,35 @@ export function pickNext(
     return { problem: e.p, reason, due: e.s.due };
   };
 
+  const fresh = entries.filter((e) => e.s.attempts === 0);
+  if (opts.order?.newFirst && fresh.length) {
+    const top = Math.max(...fresh.map((e) => addedRank(e.p)));
+    const latest = fresh.filter((e) => addedRank(e.p) === top);
+    const e = opts.order.random ? latest[Math.floor(rng() * latest.length)] : latest[0];
+    return { problem: e.p, reason: "new", due: e.s.due };
+  }
+  if (opts.order?.random) {
+    const unseen = entries.filter((e) => !opts.seen?.has(e.p.id));
+    const deck = unseen.length ? unseen : entries;
+    const e = deck[Math.floor(rng() * deck.length)];
+    return { problem: e.p, reason: stateReason(e.s, now), due: e.s.due };
+  }
   const again = entries.filter((e) => e.s.attempts > 0 && e.s.lastCorrect === false && e.s.due <= now);
   if (again.length) return choose(again, "again", 3);
   const review = entries.filter((e) => e.s.attempts > 0 && e.s.lastCorrect === true && e.s.due <= now);
   if (review.length) return choose(review, "review", 3);
-  const fresh = entries.filter((e) => e.s.attempts === 0);
   if (fresh.length) return choose(fresh, "new", fresh.length);
   return choose(entries, "ahead", 1);
+}
+
+/**
+ * The round of a random order after dealing `id` from `pool`: `seen` plus `id`, or a new round
+ * holding only `id` when `seen` already covered the whole pool.
+ */
+export function markSeen(seen: ReadonlySet<string>, pool: readonly Problem[], id: string): Set<string> {
+  const next = pool.every((p) => seen.has(p.id)) ? new Set<string>() : new Set(seen);
+  next.add(id);
+  return next;
 }
 
 export function humanizeInterval(ms: number): string {

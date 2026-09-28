@@ -13,7 +13,9 @@ The format has no formal definition, so this follows the rules of gnubg's own im
   the ``N)`` move number. An empty half is no record.
 - A half is one of: ``dd: plays`` (``13/9 24/23``; bar written as 25, off as 0; a hit may or
   may not carry ``*``; repeated tokens instead of ``(2)``; no plays = no legal move),
-  ``Doubles => N``, ``Takes``, ``Drops``, ``Wins N point(s) ...``, ``Resigns`` (ignored).
+  ``Doubles => N``, ``Takes``, ``Drops``, ``Wins N point(s) ...``, ``Resigns`` (ignored),
+  and Backgammon Galaxy's ``Losses N point(s)`` (also ``Loses``): the side that resigned, read
+  as the other side winning N points (Galaxy writes the winner's ``Wins`` beside it).
   Beavers/raccoons and Snowie "illegal play" records are refused; anything else is an error
   that names the line, so an unexpected export format cannot be imported silently wrong.
 
@@ -33,6 +35,7 @@ _SCORE = re.compile(r"^\s*(?P<p1>[^:]+?)\s*:\s*(?P<s1>\d+)\s+(?P<p2>[^:]+?)\s*:\
 _DICE = re.compile(r"^(?P<a>[1-6])(?P<b>[1-6]):(?P<rest>.*)$")
 _DOUBLE = re.compile(r"^doubles?\b(?:\s*=>\s*(?P<to>\d+))?", re.IGNORECASE)
 _WIN = re.compile(r"^wins?\s+(?P<n>\d+)", re.IGNORECASE)
+_LOSS = re.compile(r"^(?:losses|loses|loss)\s+(?P<n>\d+)", re.IGNORECASE)
 _POINT = re.compile(r"^(?:\d{1,2}|bar|off)$", re.IGNORECASE)
 
 
@@ -66,7 +69,7 @@ class HalfMove:
     line_no: int
     move_no: int | None
     action: str
-    """``move`` | ``double`` | ``take`` | ``drop`` | ``win``."""
+    """``move`` | ``double`` | ``take`` | ``drop`` | ``win`` | ``loss`` (the player gave up ``points``)."""
     dice: tuple[int, int] | None = None
     plays: str = ""
     """Normalised notation in the mover's numbering; empty = no play recorded."""
@@ -156,6 +159,11 @@ def _parse_half(text: str, player: int, line_no: int, move_no: int | None) -> Ha
         if not wm:
             raise MatError(line_no, f"cannot read the points in {s!r}")
         return HalfMove(player=player, line_no=line_no, move_no=move_no, action="win", points=int(wm.group("n")), raw=s)
+    if low.startswith("loss") or low.startswith("loses"):
+        lm = _LOSS.match(s)
+        if not lm:
+            raise MatError(line_no, f"cannot read the points in {s!r}")
+        return HalfMove(player=player, line_no=line_no, move_no=move_no, action="loss", points=int(lm.group("n")), raw=s)
     if low.startswith("resign"):
         return None
     raise MatError(line_no, f"unrecognised record {s!r}")

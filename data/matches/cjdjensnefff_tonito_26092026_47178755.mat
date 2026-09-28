@@ -1,0 +1,28 @@
+; [Site "BackgammonGalaxy"]
+; [Match ID "47178755"]
+; [Player 1 "tonito"]
+; [Player 2 "cjdjensnefff"]
+; [Player 1 Elo "1,00/0"]
+; [Player 2 Elo "0,00/0"]
+; [EventDate "2026.09.26"]
+; [EventTime "11.33"]
+; [Variation "Backgammon"]
+; [Unrated "Off"]
+; [Crawford "On"]
+; [CubeLimit "1024"]
+
+16 point match
+
+ Game 1
+ tonito : 0                      cjdjensnefff : 0
+  1)                             32: 24/21 13/11
+  2) 64: 24/18 18/14             61: 25/24 24/18
+  3) 65: 24/18 18/13             41: 13/9 6/5
+  4) 31: 8/7 7/4                 11: 25/24 25/24 6/5 24/23
+  5) 21: 6/4 14/13               32: 23/20 9/7
+  6) 21: 6/5 13/11               33: 25/22 13/10 10/7 8/5
+  7) 64: 11/5 6/2                54: 13/8 13/9
+  8) 65: 13/7 7/2                43: 8/4 7/4
+  9) 66: 13/7 13/7 13/7 13/7     55: 8/3 8/3 9/4 6/1
+ 10)  Doubles => 2                Drops
+      Wins 1 point

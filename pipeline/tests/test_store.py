@@ -163,10 +163,10 @@ def test_upgrades_a_version_1_file(tmp_path):
         assert conn.execute("SELECT COUNT(*) FROM explanations").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM matches").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM translations").fetchone()[0] == 0
-        # ADDED_COLUMNS: the explanations table of an older file gains the effort column.
+        # ADDED_COLUMNS: the explanations table of an older file gains the effort and language columns.
         cols = [row[1] for row in conn.execute("PRAGMA table_info(explanations)")]
-        assert "effort" in cols
-        assert conn.execute("SELECT effort FROM explanations").fetchone()[0] is None
+        assert "effort" in cols and "language" in cols
+        assert tuple(conn.execute("SELECT effort, language FROM explanations").fetchone()) == (None, None)
     finally:
         conn.close()
     # Opening again changes nothing.
@@ -174,7 +174,9 @@ def test_upgrades_a_version_1_file(tmp_path):
 
 
 def test_added_columns_come_from_the_typescript_file():
-    assert ("explanations", "effort", "TEXT") in added_columns_from_ts()
+    added = added_columns_from_ts()
+    assert ("explanations", "effort", "TEXT") in added
+    assert ("explanations", "language", "TEXT") in added
 
 
 def test_refuses_a_newer_file(tmp_path):

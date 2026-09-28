@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Answer, ExplanationPatch, Problem } from "@/types/problem";
 import { questionText } from "@/lib/board";
-import { applyFilters, difficultyBand, DEFAULT_FILTERS, loadFilters, saveFilters, type Filters } from "@/lib/filters";
+import { applyFilters, attemptedIds, difficultyBand, DEFAULT_FILTERS, loadFilters, saveFilters, type Filters } from "@/lib/filters";
 import { difficulty, offeredAnswers } from "@/lib/problem-utils";
-import { cardState, cardStates, dueCount, humanizeInterval, pickNext, type PickReason } from "@/lib/scheduler";
+import { loadOrder, saveOrder, type QuizOrder } from "@/lib/quiz-order";
+import { cardState, cardStates, dueCount, humanizeInterval, markSeen, pickNext, type PickReason } from "@/lib/scheduler";
 import { shuffle } from "@/lib/shuffle";
 import { clearAttempts, computeStats, loadAttempts, saveAttempt, type Attempt } from "@/lib/storage";
 import { formatLoss, formatPlayedAt } from "@/lib/matches";
@@ -25,31 +26,57 @@ interface Current {
   picked: string | null;
   /** After answering: when this problem comes back. */
   nextIn: string | null;
+  /** Random order: the problems dealt in this round, this one included. */
+  seen: Set<string>;
 }
 
-function pick(pool: Problem[], attempts: Attempt[], exclude: string | null): Current | null {
-  const next = pickNext(pool, cardStates(pool, attempts), { exclude });
+const NO_SEEN: ReadonlySet<string> = new Set();
+
+/** The round so far, without the current problem when a re-pick replaces it unanswered. */
+function dealtBefore(current: Current | null): ReadonlySet<string> {
+  if (!current) return NO_SEEN;
+  if (current.picked) return current.seen;
+  const seen = new Set(current.seen);
+  seen.delete(current.problem.id);
+  return seen;
+}
+
+function pick(pool: Problem[], attempts: Attempt[], order: QuizOrder, exclude: string | null, seen: ReadonlySet<string>): Current | null {
+  const next = pickNext(pool, cardStates(pool, attempts), { exclude, order, seen });
   if (!next) return null;
-  return { problem: next.problem, reason: next.reason, choices: shuffle(offeredAnswers(next.problem)), picked: null, nextIn: null };
+  return {
+    problem: next.problem,
+    reason: next.reason,
+    choices: shuffle(offeredAnswers(next.problem)),
+    picked: null,
+    nextIn: null,
+    seen: markSeen(seen, pool, next.problem.id),
+  };
 }
 
 const REASON: Record<PickReason, { text: string; className: string; title: string }> = {
   again: { text: "Again", className: "bg-red-100 text-red-800", title: "You got this one wrong last time" },
   review: { text: "Review", className: "bg-amber-100 text-amber-800", title: "Scheduled review" },
   new: { text: "New", className: "bg-blue-100 text-blue-800", title: "Never attempted" },
-  ahead: { text: "Ahead of schedule", className: "bg-stone-100 text-stone-600", title: "Nothing is due; showing the problem due soonest" },
+  ahead: { text: "Ahead of schedule", className: "bg-stone-100 text-stone-600", title: "Not due yet; shown before its review date" },
 };
 
 /** Rendered client-only (see QuizLoader), so lazy state initialisers may shuffle and read storage. */
 export default function Quiz({ problems }: { problems: Problem[] }) {
   const [filters, setFilters] = useState<Filters>(() => loadFilters());
+  const [order, setOrder] = useState<QuizOrder>(() => loadOrder());
   const [attempts, setAttempts] = useState<Attempt[]>(() => loadAttempts());
-  const [current, setCurrent] = useState<Current | null>(() => pick(applyFilters(problems, loadFilters()), loadAttempts(), null));
+  const [current, setCurrent] = useState<Current | null>(() => {
+    const saved = loadAttempts();
+    return pick(applyFilters(problems, loadFilters(), attemptedIds(saved)), saved, loadOrder(), null, NO_SEEN);
+  });
   const [count, setCount] = useState(1);
   /** Explanations and translations generated in this session, keyed by problem id (the store has them for next time). */
   const [generated, setGenerated] = useState<Record<string, ExplanationPatch>>({});
 
-  const pool = useMemo(() => applyFilters(problems, filters), [problems, filters]);
+  const attempted = useMemo(() => attemptedIds(attempts), [attempts]);
+  const untried = useMemo(() => problems.filter((p) => !attempted.has(p.id)).length, [problems, attempted]);
+  const pool = useMemo(() => applyFilters(problems, filters, attempted), [problems, filters, attempted]);
   const due = useMemo(() => dueCount(pool, cardStates(pool, attempts)), [pool, attempts]);
   const stats = useMemo(() => computeStats(attempts), [attempts]);
   const problem = useMemo(() => (current ? { ...current.problem, ...generated[current.problem.id] } : undefined), [current, generated]);
@@ -59,12 +86,22 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
     (f: Filters) => {
       saveFilters(f);
       setFilters(f);
-      const nextPool = applyFilters(problems, f);
+      const nextPool = applyFilters(problems, f, attempted);
       if (!current || current.picked || !nextPool.some((p) => p.id === current.problem.id)) {
-        setCurrent(pick(nextPool, attempts, null));
+        setCurrent(pick(nextPool, attempts, order, null, dealtBefore(current)));
       }
     },
-    [problems, current, attempts],
+    [problems, current, attempts, attempted, order],
+  );
+
+  /** A new order applies at once: an unanswered problem is replaced by the new order's pick. */
+  const changeOrder = useCallback(
+    (o: QuizOrder) => {
+      saveOrder(o);
+      setOrder(o);
+      if (!current || !current.picked) setCurrent(pick(pool, attempts, o, null, dealtBefore(current)));
+    },
+    [pool, current, attempts],
   );
 
   const choose = useCallback(
@@ -85,9 +122,9 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
   );
 
   const next = useCallback(() => {
-    setCurrent(pick(pool, attempts, current?.problem.id ?? null));
+    setCurrent(pick(pool, attempts, order, current?.problem.id ?? null, current?.seen ?? NO_SEEN));
     setCount((c) => c + 1);
-  }, [pool, attempts, current]);
+  }, [pool, attempts, order, current]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -110,7 +147,16 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
   }, [current, choose, next]);
 
   const filterPanel = (
-    <FilterPanel filters={filters} onChange={changeFilters} problems={problems} matching={pool.length} due={due} />
+    <FilterPanel
+      filters={filters}
+      onChange={changeFilters}
+      order={order}
+      onOrderChange={changeOrder}
+      problems={problems}
+      untried={untried}
+      matching={pool.length}
+      due={due}
+    />
   );
 
   if (problems.length === 0) {
@@ -118,14 +164,27 @@ export default function Quiz({ problems }: { problems: Problem[] }) {
   }
 
   if (!current || !problem || !position) {
+    const withTried = { ...filters, progress: "all" as const };
+    const allTried = filters.progress === "untried" && applyFilters(problems, withTried).length > 0;
     return (
       <div className="mx-auto max-w-7xl p-4">
         {filterPanel}
-        <div className="mt-6 rounded-lg border border-stone-200 bg-white p-6 text-stone-600">
-          No problems match these filters.{" "}
-          <button type="button" className="text-blue-700 underline" onClick={() => changeFilters(DEFAULT_FILTERS)}>
-            Reset filters
-          </button>
+        <div className="mt-6 rounded-lg border border-stone-200 bg-white p-6 text-stone-600" data-empty>
+          {allTried ? (
+            <>
+              You have tried every problem that matches these filters.{" "}
+              <button type="button" className="text-blue-700 underline" onClick={() => changeFilters(withTried)}>
+                Show the ones you tried
+              </button>
+            </>
+          ) : (
+            <>
+              No problems match these filters.{" "}
+              <button type="button" className="text-blue-700 underline" onClick={() => changeFilters(DEFAULT_FILTERS)}>
+                Reset filters
+              </button>
+            </>
+          )}
         </div>
       </div>
     );

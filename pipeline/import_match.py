@@ -11,9 +11,13 @@ PowerShell does not. A match already in the store (same site and match id) is sk
 ``--replace``, which deletes and rewrites its games and decisions. Explanations are never
 touched: they are keyed by XGID and survive a re-import.
 
-What is evaluated for the tracked player (``--player``, default 1 = the left column): every
-roll with a choice, the pre-roll cube decision whenever their cube was live, their doubles,
-takes and passes. Forced plays and dances are stored (``forced``) but not evaluated.
+Only the user's decisions are evaluated. Which column is the user's comes from the file name:
+Backgammon Galaxy names an export ``<you>_<opponent>_<ddmmyyyy>_<match id>.mat`` with the
+downloader first, whether they were Player 1 or Player 2 in the file. ``--player 1`` / ``2``
+overrides that (and is needed for a renamed file). Evaluated: every roll with a choice, the
+pre-roll cube decision whenever their cube was live, their doubles, takes and passes. Forced
+plays and dances are stored (``forced``) but not evaluated. Player 2's decision ids carry
+``-p2`` (``match-<id>-g1-m3-p2-checker``), as on the play screen.
 ``--raw-out`` / ``--raw-in`` save and reuse gnubg's raw output (test fixtures, re-scoring).
 """
 
@@ -23,6 +27,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -30,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bgpipeline.cli import Emit, ImportError_, expand_paths, json_emit  # noqa: E402
 from bgpipeline.gnubg_runner import GnubgError, find_gnubg, run_gnubg  # noqa: E402
-from bgpipeline.mat import MatError, parse_mat  # noqa: E402
+from bgpipeline.mat import MatError, MatHeader, parse_mat  # noqa: E402
 from bgpipeline.match_score import score_decision  # noqa: E402
 from bgpipeline.replay import replay  # noqa: E402
 from bgpipeline.store import (  # noqa: E402
@@ -65,11 +70,26 @@ def played_at(date: str | None, time: str | None) -> str | None:
         return None
 
 
+def _name_key(name: str) -> str:
+    """A player name as it appears in a file name the app saved (``safeFileName`` keeps
+    ``[A-Za-z0-9._-]`` and turns the rest into ``_``), lower-cased."""
+    return re.sub(r"[^A-Za-z0-9._-]", "_", name).lower()
+
+
+def user_player(header: MatHeader, file_name: str) -> int | None:
+    """The user's side from Galaxy's export name ``<you>_<opponent>_<date>_<match id>.mat``:
+    1 or 2, or ``None`` when the name does not start with the two players' names."""
+    stem = _name_key(Path(file_name).stem)
+    names = {1: _name_key(header.player1), 2: _name_key(header.player2)}
+    hits = [p for p, other in ((1, 2), (2, 1)) if stem.startswith(f"{names[p]}_{names[other]}_")]
+    return hits[0] if len(hits) == 1 else None
+
+
 def import_file(
     path: Path,
     *,
     store: Path = DEFAULT_STORE,
-    player: int = 1,
+    player: int | None = None,
     plies: int = 2,
     cube_plies: int | None = None,
     gnubg: str | None = None,
@@ -81,7 +101,8 @@ def import_file(
     emit: Emit = lambda event, **fields: None,
     today: dt.date | None = None,
 ) -> dict:
-    """Import one file. Returns the summary dict; raises ImportError_ / GnubgError / StoreError."""
+    """Import one file. ``player`` is the user's side, ``None`` to read it from the file name
+    (``user_player``). Returns the summary dict; raises ImportError_ / GnubgError / StoreError."""
     emit("start", file=path.name)
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -90,6 +111,16 @@ def import_file(
     sha = hashlib.sha256(text.encode("utf-8")).hexdigest()
     try:
         match = parse_mat(text)
+    except MatError as e:
+        raise ImportError_(f"{path.name}: {e}") from e
+    if player is None:
+        player = user_player(match.header, path.name)
+        if player is None:
+            raise ImportError_(
+                f"{path.name}: cannot tell whether you are {match.header.player1} (Player 1) or {match.header.player2} (Player 2): "
+                "Galaxy names an export <you>_<opponent>_<date>_<match id>.mat, and this name does not. Choose the player yourself."
+            )
+    try:
         rep = replay(match, player)
     except MatError as e:
         raise ImportError_(f"{path.name}: {e}") from e
@@ -111,6 +142,8 @@ def import_file(
             site=site,
             site_match_id=site_match_id,
             players=[match.header.player1, match.header.player2],
+            player=player,
+            you=match.header.player1 if player == 1 else match.header.player2,
             match_length=match.match_length,
             games=len(rep.games),
             decisions=len(rep.decisions),
@@ -218,7 +251,8 @@ def _human_emit(event: str, **fields) -> None:
     elif event == "parsed":
         print(
             f"{fields.get('file')}: {fields.get('players')[0]} vs {fields.get('players')[1]}, {fields.get('match_length')}-point match, "
-            f"{fields.get('games')} game(s), {fields.get('to_evaluate')} decisions to evaluate ({fields.get('positions')} positions)",
+            f"{fields.get('games')} game(s), {fields.get('to_evaluate')} decisions of {fields.get('you')} (player {fields.get('player')}) "
+            f"to evaluate ({fields.get('positions')} positions)",
             file=sys.stderr,
         )
     elif event == "warning":
@@ -230,7 +264,12 @@ def _human_emit(event: str, **fields) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="+", help=".mat files, folders or globs")
-    ap.add_argument("--player", type=int, default=1, choices=(1, 2), help="whose decisions to analyse (default 1, the left column)")
+    ap.add_argument(
+        "--player",
+        default="auto",
+        choices=("auto", "1", "2"),
+        help="your side in the file: 1 = the left column, 2 = the right one (default auto: from Galaxy's file name)",
+    )
     ap.add_argument("--plies", type=int, default=2, help="chequer-play evaluation depth (default 2)")
     ap.add_argument("--cube-plies", type=int, default=None, help="cube evaluation depth (default: --plies)")
     ap.add_argument("--gnubg", help="path to gnubg-cli.exe (default: auto-detect, or $BG_GNUBG)")
@@ -262,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
             import_file(
                 p,
                 store=args.store,
-                player=args.player,
+                player=None if args.player == "auto" else int(args.player),
                 plies=args.plies,
                 cube_plies=args.cube_plies,
                 gnubg=args.gnubg,

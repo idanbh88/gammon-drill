@@ -1,5 +1,5 @@
 /**
- * The SQLite store (`data/store.sqlite`): generated explanations and their Hebrew translations,
+ * The SQLite store (`data/store.sqlite`): generated explanations and their translations,
  * and the matches, games and decisions written by the match importer
  * (pipeline/import_match.py). Server-only (node:sqlite); do not import from client components.
  *
@@ -12,7 +12,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { Answer, Problem } from "@/types/problem";
+import { explanationLanguage, translationLanguage, type Answer, type ExplanationLanguage, type Problem } from "@/types/problem";
 import { storedExplanationFields, type StoredExplanation } from "./matches";
 import { mistakeProblems, type MistakeRow } from "./mistakes";
 import { ratePlayer, type PlayerRating, type RatedDecision } from "./pr";
@@ -53,19 +53,22 @@ export interface ExplanationRow {
   servedByFallback: boolean;
   /** output_config.effort sent with the request; null for rows written before schema v4. */
   effort: string | null;
+  /** The language of the text: "he" from 2026-09-27 on; rows written before schema v6 (NULL) are English. */
+  language: ExplanationLanguage;
 }
 
 export type NewExplanation = Omit<ExplanationRow, "id">;
 
-/** The language code of the translations the app writes. */
-export const HEBREW = "he";
+/** Language codes of explanations and translations (ISO 639-1). */
+export const HEBREW = "he" satisfies ExplanationLanguage;
+export const ENGLISH = "en" satisfies ExplanationLanguage;
 
 /** One translation of an explanation (schema v5); the same provenance columns as an explanation. */
 export interface TranslationRow {
   id: number;
   /** The explanations row translated. */
   explanationId: number;
-  /** ISO 639-1 code: "he". */
+  /** ISO 639-1 code of the language translated into: "en" for a Hebrew explanation, "he" for an English one. */
   language: string;
   requestedModel: string;
   model: string;
@@ -85,8 +88,8 @@ export interface TranslationRow {
 
 export type NewTranslation = Omit<TranslationRow, "id">;
 
-/** The newest explanation of a position with the newest Hebrew translation of that same row. */
-export type LatestExplanation = ExplanationRow & { hebrew: TranslationRow | null };
+/** The newest explanation of a position with the newest translation of that same row into the other language. */
+export type LatestExplanation = ExplanationRow & { translation: TranslationRow | null };
 
 export interface MatchRow {
   id: number;
@@ -240,9 +243,10 @@ const BASE_COLUMNS =
   "id, xgid, problem_id, requested_model, model, prompt_version, prompt_sha256, explanation, raw_text, generated_at, " +
   "input_tokens, output_tokens, cache_read_tokens, request_id, served_by_fallback";
 
-/** The explanation columns to select; a file opened read-only before its v4 upgrade has no effort. */
+/** The explanation columns to select; a file opened read-only before its v4 / v6 upgrade has no effort / language. */
 function explanationColumns(db: DatabaseSync): string {
-  return BASE_COLUMNS + (hasColumn(db, "explanations", "effort") ? ", effort" : ", NULL AS effort");
+  const optional = (column: string) => (hasColumn(db, "explanations", column) ? `, ${column}` : `, NULL AS ${column}`);
+  return BASE_COLUMNS + optional("effort") + optional("language");
 }
 
 /** The provenance columns explanations and translations share. */
@@ -270,6 +274,7 @@ function fromRow(r: Record<string, unknown>): ExplanationRow {
     problemId: String(r.problem_id),
     explanation: String(r.explanation),
     ...provenanceFromRow(r),
+    language: explanationLanguage(r.language == null ? null : String(r.language)),
   };
 }
 
@@ -278,8 +283,8 @@ export function insertExplanation(db: DatabaseSync, e: NewExplanation): number {
   const result = db
     .prepare(
       "INSERT INTO explanations (xgid, problem_id, requested_model, model, prompt_version, prompt_sha256, explanation, raw_text, " +
-        "generated_at, input_tokens, output_tokens, cache_read_tokens, request_id, served_by_fallback, effort) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "generated_at, input_tokens, output_tokens, cache_read_tokens, request_id, served_by_fallback, effort, language) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
       e.xgid,
@@ -297,20 +302,21 @@ export function insertExplanation(db: DatabaseSync, e: NewExplanation): number {
       e.requestId,
       e.servedByFallback ? 1 : 0,
       e.effort,
+      e.language,
     );
   return Number(result.lastInsertRowid);
 }
 
-/** The newest explanation per XGID, each with the newest Hebrew translation of that row. */
+/** The newest explanation per XGID, each with the newest translation of that row into the other language. */
 export function latestExplanations(db: DatabaseSync): Map<string, LatestExplanation> {
   const rows = db
     .prepare(`SELECT ${explanationColumns(db)} FROM explanations e WHERE e.id = (SELECT MAX(id) FROM explanations WHERE xgid = e.xgid)`)
     .all() as Record<string, unknown>[];
-  const hebrew = latestTranslations(db, HEBREW);
+  const translations = { [HEBREW]: latestTranslations(db, HEBREW), [ENGLISH]: latestTranslations(db, ENGLISH) };
   return new Map(
     rows.map((r) => {
       const row = fromRow(r);
-      return [row.xgid, { ...row, hebrew: hebrew.get(row.id) ?? null }];
+      return [row.xgid, { ...row, translation: translations[translationLanguage(row.language)].get(row.id) ?? null }];
     }),
   );
 }
@@ -349,7 +355,7 @@ export function readExplanation(dir: string, id: number): ExplanationRow | null 
   return withReadOnly(dir, null, (db) => getExplanation(db, id));
 }
 
-/** Overlay stored explanations and their Hebrew translations onto problems: a store row wins over the JSON field. */
+/** Overlay stored explanations and their translations onto problems: a store row wins over the JSON field. */
 export function applyStore(problems: Problem[], latest: Map<string, StoredExplanation>): Problem[] {
   return problems.map((p) => {
     const row = latest.get(p.xgid);
@@ -358,7 +364,7 @@ export function applyStore(problems: Problem[], latest: Map<string, StoredExplan
 }
 
 // ---------------------------------------------------------------------------
-// Translations (schema v5): the Hebrew text under an explanation, appended like explanations
+// Translations (schema v5): the explanation in the other language, appended like explanations
 
 /** The translations table exists from schema version 5 on. */
 export function hasTranslations(db: DatabaseSync): boolean {

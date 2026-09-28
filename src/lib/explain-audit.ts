@@ -8,10 +8,12 @@
  * checkers, single dice, small scores) and cube values are not checked. Moves are split into hops (`bar/21* 24/21` is
  * `bar/21` and `24/21`) and every hop must occur in some answer.
  *
- * Returns the tokens that nothing in the data explains, in order of appearance.
+ * Returns the tokens that nothing in the data explains, in order of appearance. Works the same
+ * on Hebrew text: the prompt keeps moves in notation and numbers in digits.
  *
- * `translationMismatches` compares a translation with its English original the same way: the
- * numbers and moves must be the same in both.
+ * `translationMismatches` compares a translation with its original (Hebrew into English, or an
+ * older English explanation into Hebrew) the same way: the numbers and moves must be the same in
+ * both.
  */
 import type { Problem } from "@/types/problem";
 import { actingView } from "./board";
@@ -139,15 +141,15 @@ function comparable(text: string): Map<string, string> {
 }
 
 /**
- * Numbers and moves that a translation and its English original do not share: first those of
- * the English missing from the translation, then those the translation added. Empty when the
- * two agree.
+ * Numbers and moves that a translation and its original do not share: first those of the
+ * original missing from the translation, then those the translation added. Empty when the two
+ * agree.
  */
-export function translationMismatches(english: string, translation: string): string[] {
-  const en = comparable(english);
+export function translationMismatches(original: string, translation: string): string[] {
+  const orig = comparable(original);
   const tr = comparable(translation);
   const out: string[] = [];
-  for (const [key, shown] of en) if (!tr.has(key)) out.push(shown);
-  for (const [key, shown] of tr) if (!en.has(key)) out.push(shown);
+  for (const [key, shown] of orig) if (!tr.has(key)) out.push(shown);
+  for (const [key, shown] of tr) if (!orig.has(key)) out.push(shown);
   return out;
 }

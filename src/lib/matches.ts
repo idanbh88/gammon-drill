@@ -5,6 +5,7 @@
  */
 import {
   CATEGORIES,
+  explanationLanguage,
   POSITION_CLASSES,
   type Category,
   type ExplanationMeta,
@@ -66,30 +67,40 @@ export interface StoredExplanation {
   /** The store row. */
   id?: number;
   explanation: string;
+  /** The language of `explanation` ("he" or "en"); absent or null means English (rows before store schema v6). */
+  language?: string | null;
   model: string;
   generatedAt: string;
   /** null for explanations written before the effort was recorded. */
   effort?: string | null;
-  /** The newest Hebrew translation of this row, if any. */
-  hebrew?: Pick<ExplanationTranslation, "explanationId" | "text" | "model" | "generatedAt"> | null;
+  /** The newest translation of this row into the other language, if any. */
+  translation?: (Pick<ExplanationTranslation, "explanationId" | "text" | "model" | "generatedAt"> & { language: string }) | null;
 }
 
-/** What the panel shows under an explanation: the model, the date and, when recorded, the effort. */
-export function explanationMeta(row: Pick<StoredExplanation, "id" | "model" | "generatedAt" | "effort">): ExplanationMeta {
-  const meta: ExplanationMeta = { model: row.model, generatedAt: row.generatedAt.slice(0, 10) };
+/** What the panel shows under an explanation: the language, the model, the date and, when recorded, the effort. */
+export function explanationMeta(row: Pick<StoredExplanation, "id" | "model" | "generatedAt" | "effort" | "language">): ExplanationMeta {
+  const meta: ExplanationMeta = { model: row.model, generatedAt: row.generatedAt.slice(0, 10), language: explanationLanguage(row.language) };
   if (row.id !== undefined) meta.id = row.id;
   if (row.effort) meta.effort = row.effort;
   return meta;
 }
 
-/** A problem's explanation fields from its stored explanation: the text, its provenance and its Hebrew translation. */
-export function storedExplanationFields(stored: StoredExplanation): Pick<Problem, "explanation" | "explanationMeta" | "explanationHebrew"> {
-  const fields: Pick<Problem, "explanation" | "explanationMeta" | "explanationHebrew"> = {
+/** A problem's explanation fields from its stored explanation: the text, its provenance and its translation. */
+export function storedExplanationFields(stored: StoredExplanation): Pick<Problem, "explanation" | "explanationMeta" | "explanationTranslation"> {
+  const fields: Pick<Problem, "explanation" | "explanationMeta" | "explanationTranslation"> = {
     explanation: stored.explanation,
     explanationMeta: explanationMeta(stored),
   };
-  const he = stored.hebrew;
-  if (he) fields.explanationHebrew = { explanationId: he.explanationId, text: he.text, model: he.model, generatedAt: he.generatedAt.slice(0, 10) };
+  const t = stored.translation;
+  if (t) {
+    fields.explanationTranslation = {
+      explanationId: t.explanationId,
+      language: explanationLanguage(t.language),
+      text: t.text,
+      model: t.model,
+      generatedAt: t.generatedAt.slice(0, 10),
+    };
+  }
   return fields;
 }
 
@@ -212,6 +223,11 @@ export function matchResult(match: Pick<MatchRow, "matchLength">, games: GameRow
     else if (score2 >= match.matchLength) winner = 2;
   }
   return { score1, score2, winner };
+}
+
+/** A score with the user's points first ("3–1"); `score1` / `score2` are the file's player 1 / 2. */
+export function formatScore(user: number, score1: number, score2: number): string {
+  return user === 2 ? `${score2}–${score1}` : `${score1}–${score2}`;
 }
 
 export function formatLoss(loss: number): string {

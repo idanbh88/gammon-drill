@@ -67,6 +67,11 @@ def test_parse_move_line_cube_records():
     assert hit.plays == "24/18* 13/11"
     assert parse_move_line("  4) 55: Cannot Move", 4)[0].plays == ""
     assert parse_move_line("  5) Resigns", 5) == []
+    # Galaxy, after a resignation: the loser's "Losses", the winner's "Wins"
+    (lost, won) = parse_move_line(" 17)  Losses 1 point                                               Wins 1 point and the match", 17)
+    assert (lost.player, lost.action, lost.points) == (1, "loss", 1)
+    assert (won.player, won.action, won.points) == (2, "win", 1)
+    assert parse_move_line("  6) Loses 2 points", 6)[0].points == 2
 
 
 @pytest.mark.parametrize(
@@ -77,6 +82,7 @@ def test_parse_move_line_cube_records():
         ("  3) Beavers", "beavers"),
         ("  3) Something odd", "unrecognised record"),
         ("  3) Wins the match", "points"),
+        ("  3) Losses the match", "points"),
     ],
 )
 def test_bad_records_name_the_line(line, message):

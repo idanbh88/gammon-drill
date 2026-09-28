@@ -80,8 +80,9 @@ whether an anchor can be broken, cube state). Rules live in `bgpipeline/classify
 
 Explanations are not generated here. The app writes them on demand (a button under the
 answer reveal, model of your choice) into `data/store.sqlite`, table `explanations`, schema in
-`src/lib/store-schema.ts`. Rows are never updated or deleted. Read them from Python with the
-standard library:
+`src/lib/store-schema.ts`: in Hebrew since 2026-09-27 (`language` = `he`; NULL for the older
+English ones), with translations in table `translations`. Rows are never updated or deleted.
+Read them from Python with the standard library:
 
 ```python
 import sqlite3

@@ -1,13 +1,15 @@
 /**
- * Hebrew translations of stored explanations, generated only from the explanation panel: right
- * after it receives a new explanation, or from its "Translate to Hebrew" button for an older
- * one. Each result is inserted into table translations (never updated or deleted); the loaders
- * show the newest translation of the explanation on show.
+ * Translations of stored explanations into the other language: a Hebrew explanation into
+ * English, an older English one into Hebrew. Generated only from the explanation panel: right
+ * after it receives a new explanation, or from its "Translate to …" button for one stored
+ * without a translation. Each result is inserted into table translations (never updated or
+ * deleted); the loaders show the newest translation of the explanation on show.
  *
  *   GET  /api/explain/translate?explanationId=12   -> the prompt that would be sent (no API call)
- *   POST /api/explain/translate { explanationId, model } -> { hebrew, mismatches, ... }
+ *   POST /api/explain/translate { explanationId, model } -> { translation, mismatches, ... }
  *
- * The model is the one picked in the panel; the effort is always TRANSLATION_EFFORT.
+ * The direction comes from the explanation's language; the model is the one picked in the panel,
+ * the effort always TRANSLATION_EFFORT.
  */
 import { NextResponse } from "next/server";
 import { askClaude, ClaudeError, hasApiKey, NO_KEY, type ClaudeReply } from "@/lib/claude";
@@ -15,16 +17,9 @@ import { MAX_TOKENS } from "@/lib/explain";
 import { translationMismatches } from "@/lib/explain-audit";
 import { isExplainModel } from "@/lib/explain-models";
 import { DATA_DIR } from "@/lib/problems";
-import { HEBREW, insertTranslation, openStore, readExplanation, storePath } from "@/lib/store";
-import {
-  buildTranslationPrompt,
-  cleanTranslation,
-  TRANSLATION_EFFORT,
-  TRANSLATION_PROMPT_VERSION,
-  TRANSLATION_SYSTEM_PROMPT,
-  translationSha256,
-} from "@/lib/translate";
-import type { ExplanationTranslation } from "@/types/problem";
+import { insertTranslation, openStore, readExplanation, storePath } from "@/lib/store";
+import { buildTranslationPrompt, cleanTranslation, TRANSLATION_EFFORT, TRANSLATION_PROMPTS, translationSha256 } from "@/lib/translate";
+import { translationLanguage, type ExplanationTranslation } from "@/types/problem";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,15 +37,18 @@ function parseId(x: unknown): number | null {
 export async function GET(req: Request) {
   const raw = new URL(req.url).searchParams.get("explanationId");
   const id = parseId(raw);
-  const english = id === null ? null : readExplanation(DATA_DIR, id);
-  if (!english) return bad(`unknown explanation "${raw ?? ""}"`);
+  const original = id === null ? null : readExplanation(DATA_DIR, id);
+  if (!original) return bad(`unknown explanation "${raw ?? ""}"`);
+  const into = translationLanguage(original.language);
   return NextResponse.json({
-    explanationId: english.id,
-    problemId: english.problemId,
-    promptVersion: TRANSLATION_PROMPT_VERSION,
+    explanationId: original.id,
+    problemId: original.problemId,
+    from: original.language,
+    into,
+    promptVersion: TRANSLATION_PROMPTS[into].version,
     effort: TRANSLATION_EFFORT,
-    system: TRANSLATION_SYSTEM_PROMPT,
-    prompt: buildTranslationPrompt(english.explanation),
+    system: TRANSLATION_PROMPTS[into].system,
+    prompt: buildTranslationPrompt(original.explanation, into),
   });
 }
 
@@ -65,14 +63,15 @@ export async function POST(req: Request) {
   if (id === null) return bad("explanationId is required");
   const { model } = body;
   if (typeof model !== "string" || !isExplainModel(model)) return bad(`unknown model "${String(model)}"`);
-  const english = readExplanation(DATA_DIR, id);
-  if (!english) return bad(`unknown explanation ${id}`);
+  const original = readExplanation(DATA_DIR, id);
+  if (!original) return bad(`unknown explanation ${id}`);
   if (!hasApiKey()) return bad(NO_KEY, 500);
 
-  const prompt = buildTranslationPrompt(english.explanation);
+  const into = translationLanguage(original.language);
+  const prompt = buildTranslationPrompt(original.explanation, into);
   let reply: ClaudeReply;
   try {
-    reply = await askClaude({ model, effort: TRANSLATION_EFFORT, system: TRANSLATION_SYSTEM_PROMPT, prompt, maxTokens: MAX_TOKENS });
+    reply = await askClaude({ model, effort: TRANSLATION_EFFORT, system: TRANSLATION_PROMPTS[into].system, prompt, maxTokens: MAX_TOKENS });
   } catch (e) {
     return bad(e instanceof ClaudeError ? e.message : String(e), 502);
   }
@@ -84,11 +83,11 @@ export async function POST(req: Request) {
   try {
     insertTranslation(db, {
       explanationId: id,
-      language: HEBREW,
+      language: into,
       requestedModel: model,
       model: reply.model,
-      promptVersion: TRANSLATION_PROMPT_VERSION,
-      promptSha256: translationSha256(prompt),
+      promptVersion: TRANSLATION_PROMPTS[into].version,
+      promptSha256: translationSha256(prompt, into),
       text,
       rawText: reply.rawText,
       generatedAt,
@@ -103,10 +102,10 @@ export async function POST(req: Request) {
     db.close();
   }
 
-  const hebrew: ExplanationTranslation = { explanationId: id, text, model: reply.model, generatedAt: generatedAt.slice(0, 10) };
+  const translation: ExplanationTranslation = { explanationId: id, language: into, text, model: reply.model, generatedAt: generatedAt.slice(0, 10) };
   return NextResponse.json({
-    hebrew,
-    mismatches: translationMismatches(english.explanation, text),
+    translation,
+    mismatches: translationMismatches(original.explanation, text),
     servedByFallback: reply.servedByFallback,
     usage: { inputTokens: reply.inputTokens, outputTokens: reply.outputTokens },
   });

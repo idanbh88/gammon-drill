@@ -6,6 +6,7 @@ import {
   errorLevel,
   formatLoss,
   formatPlayedAt,
+  formatScore,
   groupByGame,
   matchResult,
   playedText,
@@ -84,24 +85,37 @@ describe("decisionProblem", () => {
     expect(cube.analysis?.positionClass).toBeUndefined();
     expect(cube.features).toBeUndefined();
     expect(cube.explanation).toBe("Text.");
-    expect(cube.explanationMeta).toEqual({ model: "claude-opus-5", generatedAt: "2026-09-04" });
-    expect(cube.explanationHebrew).toBeUndefined();
+    // No language recorded (rows before store schema v6): English.
+    expect(cube.explanationMeta).toEqual({ model: "claude-opus-5", generatedAt: "2026-09-04", language: "en" });
+    expect(cube.explanationTranslation).toBeUndefined();
     expect(decisionProblem(row({ kind: "take", played: "pass" })).type).toBe("cube");
   });
 
-  it("carries the stored row id and its Hebrew translation", () => {
+  it("carries the stored row id, its language and its translation", () => {
     const stored = {
       id: 12,
       explanation: "Text.",
+      language: "en",
       model: "claude-opus-5",
       generatedAt: "2026-09-24T10:00:00.000Z",
       effort: "high",
-      hebrew: { explanationId: 12, text: "טקסט.", model: "claude-opus-5", generatedAt: "2026-09-24T10:01:00.000Z" },
+      translation: { explanationId: 12, language: "he", text: "טקסט.", model: "claude-opus-5", generatedAt: "2026-09-24T10:01:00.000Z" },
     };
     const p = decisionProblem(row(), new Map([[XGID, stored]]));
-    expect(p.explanationMeta).toEqual({ id: 12, model: "claude-opus-5", generatedAt: "2026-09-24", effort: "high" });
-    expect(p.explanationHebrew).toEqual({ explanationId: 12, text: "טקסט.", model: "claude-opus-5", generatedAt: "2026-09-24" });
-    expect(decisionProblem(row(), new Map([[XGID, { ...stored, hebrew: null }]])).explanationHebrew).toBeUndefined();
+    expect(p.explanationMeta).toEqual({ id: 12, model: "claude-opus-5", generatedAt: "2026-09-24", effort: "high", language: "en" });
+    expect(p.explanationTranslation).toEqual({ explanationId: 12, language: "he", text: "טקסט.", model: "claude-opus-5", generatedAt: "2026-09-24" });
+    expect(decisionProblem(row(), new Map([[XGID, { ...stored, translation: null }]])).explanationTranslation).toBeUndefined();
+
+    const hebrew = {
+      ...stored,
+      id: 13,
+      explanation: "טקסט.",
+      language: "he",
+      translation: { explanationId: 13, language: "en", text: "Text.", model: "claude-opus-5", generatedAt: "2026-09-27T10:01:00.000Z" },
+    };
+    const q = decisionProblem(row(), new Map([[XGID, hebrew]]));
+    expect(q.explanationMeta?.language).toBe("he");
+    expect(q.explanationTranslation).toEqual({ explanationId: 13, language: "en", text: "Text.", model: "claude-opus-5", generatedAt: "2026-09-27" });
   });
 });
 
@@ -152,6 +166,11 @@ describe("summaries", () => {
     expect(matchResult({ matchLength: 5 }, games)).toEqual({ score1: 1, score2: 3, winner: null });
     expect(matchResult({ matchLength: 0 }, games)).toEqual({ score1: 1, score2: 3, winner: null });
     expect(matchResult({ matchLength: 5 }, [])).toEqual({ score1: 0, score2: 0, winner: null });
+  });
+
+  it("puts the user's score first", () => {
+    expect(formatScore(1, 1, 3)).toBe("1–3");
+    expect(formatScore(2, 1, 3)).toBe("3–1");
   });
 
   it("formats losses and dates", () => {

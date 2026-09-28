@@ -9,6 +9,8 @@ from bgpipeline.xgid import acting_view, parse_xgid, to_perspective
 
 FIXTURES = Path(__file__).with_name("fixtures")
 GALAXY = parse_mat((FIXTURES / "galaxy_45552673.mat").read_text(encoding="utf-8"))
+CUBES = parse_mat((FIXTURES / "cjdjensnefff_brickier_25092026_47133758.mat").read_text(encoding="utf-8"))
+RESIGNED_TEXT = (FIXTURES / "cjdjensnefff_bongo_26092026_47200250.mat").read_text(encoding="utf-8")
 
 
 def test_galaxy_replay_player_1():
@@ -39,6 +41,34 @@ def test_galaxy_replay_player_2_sees_the_other_side():
     first = r.decisions[0]
     assert first.xgid == "-b----E-CA--eD---c-e---AA-:0:0:-1:54:0:0:0:1:10"  # after 13/9 24/23, player 2 to play 54
     assert first.played == "24/20 13/8"
+    assert first.decision_id == "g1-m1-p2-checker" and replay(GALAXY, player=1).decisions[0].decision_id == "g1-m1-checker"
+
+
+def test_galaxy_match_with_cube_actions():
+    """A real 3-point Galaxy export, the user in the right column: a drop, a double of theirs, a take."""
+    r = replay(CUBES, player=2)
+    assert [(g.score, g.crawford, g.winner, g.points) for g in r.games] == [((0, 0), False, 1, 1), ((1, 0), False, 2, 1), ((1, 1), False, 2, 2)]
+    assert r.final_score == (1, 3)
+    assert len(r.decisions) == 78 and sum(not d.forced for d in r.decisions) == 61
+    actions = [(d.decision_id, d.played) for d in r.decisions if d.played in ("double", "take", "pass")]
+    assert actions == [("g1-m9-p2-take", "pass"), ("g2-m8-p2-cube", "double"), ("g3-m9-p2-take", "take")]
+    take = next(d for d in r.decisions if d.decision_id == "g3-m9-p2-take")
+    assert take.xgid == "-ba--BBaCA--bC---b-e--bBB-:0:0:1:D:1:1:0:3:10"  # brickier doubled; the user answers
+    assert [d.decision_id for d in replay(CUBES, player=1).decisions if d.played == "double"] == ["g1-m9-cube", "g3-m9-cube"]
+
+
+
+def test_galaxy_resignation_losses_record():
+    """Galaxy ends a resigned game with "Losses 1 point" (the loser) beside "Wins 1 point"."""
+    r = replay(parse_mat(RESIGNED_TEXT), player=2)
+    (game,) = r.games
+    assert (game.winner, game.points) == (2, 1) and r.final_score == (0, 1)
+    assert r.decisions and all(d.player == 2 for d in r.decisions)
+    alone = parse_mat(RESIGNED_TEXT.replace("Wins 1 point and the match", ""))
+    assert replay(alone, player=2).games[0].winner == 2  # "Losses" alone still decides it
+    wrong = parse_mat(RESIGNED_TEXT.replace("Wins 1 point and the match", "Wins 2 points and the match"))
+    with pytest.raises(MatError, match="the file says 2 point"):
+        replay(wrong, player=2)
 
 
 CUBE_MATCH = """; [Site "Test"]

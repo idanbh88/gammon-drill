@@ -1,17 +1,24 @@
 /**
  * The prompt for Claude-written explanations, built from the same data the app shows: the
  * position from Blue's side, the question, the ranked answers with equities / losses /
- * probabilities and the classifier's features. Server-only (used by the /api/explain route).
+ * probabilities and the classifier's features. The data and the instructions are in English;
+ * the model writes the explanation in Hebrew, the language the user reads most easily (prompt
+ * v4; v1 to v3 asked for English, and those texts were translated into Hebrew afterwards).
+ * Server-only (used by the /api/explain route).
  *
  * Bump PROMPT_VERSION when SYSTEM_PROMPT or the prompt layout changes; every stored explanation
  * records the version and a hash of its full prompt.
  */
 import { createHash } from "node:crypto";
-import type { Problem } from "@/types/problem";
+import type { ExplanationLanguage, Problem } from "@/types/problem";
 import { actingView, questionText } from "./board";
+import { stripInvisibleMarks } from "./rtl";
 import { parseXgid, type Position } from "./xgid";
 
-export const PROMPT_VERSION = "v3";
+export const PROMPT_VERSION = "v4";
+
+/** The language SYSTEM_PROMPT asks for, recorded with every explanation; the panel then asks for an English translation. */
+export const EXPLANATION_LANGUAGE: ExplanationLanguage = "he";
 
 /** Room for the model's thinking as well as the answer; thinking tokens count against it. */
 export const MAX_TOKENS = 16000;
@@ -22,14 +29,16 @@ export function maxTokensFor(effort: string): number {
   return effort === "xhigh" || effort === "max" ? MAX_TOKENS_DEEP : MAX_TOKENS;
 }
 
-export const SYSTEM_PROMPT = `You are an expert backgammon coach. A position-training app shows the reader a position, they choose a play or a cube action, and then they see the engine's ranking of the candidates with their equities. You write the explanation that appears under that ranking.
+export const SYSTEM_PROMPT = `You are an expert backgammon coach. A position-training app shows the reader a position, they choose a play or a cube action, and then they see the engine's ranking of the candidates with their equities. You write the explanation that appears under that ranking. The reader is an Israeli backgammon player who reads Hebrew more easily than English, so you write it in Hebrew.
 
 Goal: the reader should understand why the best play is right and what the alternatives give up, the way a strong player would say it at the board.
 
 Constraints:
-- 3 to 5 sentences of plain prose, about 120 words at most. No headings, lists, markdown or preamble.
+- Write natural, fluent Hebrew, the way an Israeli coach would say it, not a translation from English. 3 to 5 sentences of plain prose, about 120 words at most. No headings, lists, markdown or preamble.
 - Name the concrete idea the best play serves (safety, priming, blitzing, anchoring, timing, the race, gammons, cube ownership, match score). For the alternatives you mention, quote the equity losses you were given.
-- Use "Blue" and "White" and Blue's point numbering exactly as in the data: Blue moves from the 24-point down to the 1-point and off.
+- Blue is כחול and White is לבן. Use Blue's point numbering exactly as in the data: Blue moves from the 24-point down to the 1-point and off.
+- Write every move exactly as the data does, in its notation with Latin letters (for example 13/7 8/7, bar/21*, 6/4(2), 6/off), and every number in digits.
+- Use the backgammon terms Israeli players use. Add the English term in parentheses, the first time only, where the reader might not know the Hebrew one; never after a word that is just the English term in Hebrew letters.
 - Do not invent moves, dice, numbers or rules; do not restate the whole position; do not hedge.`;
 
 function pct(x: number): string {
@@ -139,15 +148,18 @@ export function buildPrompt(problem: Problem, opts: PromptOptions = {}): string 
   const feats = describeFeatures(problem);
   if (feats) sections.push(`Board features: ${feats}.`);
   if (opts.played) sections.push(describePlayed(opts.played));
-  sections.push("Write the explanation now.");
+  sections.push("Write the explanation now, in Hebrew.");
   return sections.join("\n\n");
 }
 
-/** Plain prose only: strip markdown bullets / headings, code fences and a leading label. */
+/**
+ * Plain prose only: strip markdown bullets / headings, code fences, a leading label ("Explanation:",
+ * "הסבר:") and invisible marks (bidi controls, soft hyphens: the page sets the direction itself).
+ */
 export function cleanExplanation(text: string): string {
   const lines: string[] = [];
   let fenced = false;
-  for (const line of text.trim().split(/\r?\n/)) {
+  for (const line of stripInvisibleMarks(text).trim().split(/\r?\n/)) {
     let s = line.trim();
     if (s.startsWith("```")) {
       fenced = !fenced;
@@ -155,7 +167,7 @@ export function cleanExplanation(text: string): string {
     }
     if (fenced || !s) continue;
     s = s.replace(/^(#+\s*|[-*]\s+|\d+[.)]\s+)/, "");
-    s = s.replace(/^\**explanation\**\s*:\s*/i, "");
+    s = s.replace(/^\**(?:explanation|הסבר)\**\s*:\s*/i, "");
     s = s.replaceAll("**", "");
     lines.push(s);
   }

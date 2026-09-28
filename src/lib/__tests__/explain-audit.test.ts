@@ -40,6 +40,13 @@ describe("auditExplanation", () => {
     expect(auditExplanation(byId["seed-004"], "bar/21*/18 and bar/21* 24/21")).toEqual([]);
     expect(auditExplanation(byId["seed-004"], "bar/21*/17, 13/8(2) and 8/5(2)")).toEqual(["bar/21*/17", "13/8(2)"]);
   });
+
+  it("checks a Hebrew explanation the same way", () => {
+    const good = "כחול משחק 8/5 6/5 ובונה את נקודה 5; המהלך 24/23 13/10 מפסיד 0.231, ו-8/5 6/5 מנצח ב-55.1% מהמשחקים. הספירה 167 מול 167.";
+    expect(auditExplanation(byId["seed-001"], good)).toEqual([]);
+    const bad = "המהלך 13/8 מפסיד 0.999 ומנצח ב-42% מהמשחקים, והמרוץ הוא 150 מול 167.";
+    expect(auditExplanation(byId["seed-001"], bad)).toEqual(["13/8", "0.999", "42%", "150"]);
+  });
 });
 
 describe("translationMismatches", () => {
@@ -59,5 +66,11 @@ describe("translationMismatches", () => {
     expect(translationMismatches("about 30% wins, 0.050 behind", "כ-30 אחוז ניצחונות, 0.05 מאחור")).toEqual([]);
     expect(translationMismatches("make the 5-point with two checkers", "לבנות את הנקודה החמישית עם 2 כלים")).toEqual([]);
     expect(translationMismatches("an opening 63", "פתיחה של 64")).toEqual(["63", "64"]);
+  });
+
+  it("checks an English translation against its Hebrew original", () => {
+    const hebrew = "לשחק 13/8 מפסיד 0.045 ומנצח ב-55.1% מהמשחקים; bar/21* 24/21 מכה.";
+    expect(translationMismatches(hebrew, "Playing 13/8 loses 0.045 and wins 55.1% of games; bar/21* 24/21 hits.")).toEqual([]);
+    expect(translationMismatches(hebrew, "Playing 13/8 loses 0.054 and wins 55.1% of games; bar/21* 24/21 hits.")).toEqual(["0.045", "0.054"]);
   });
 });

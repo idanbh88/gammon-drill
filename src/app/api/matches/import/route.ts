@@ -3,9 +3,12 @@
  * (pipeline/import_match.py via uv) as a child process, streaming its NDJSON progress back to
  * the browser as it happens; the importer writes the match into data/store.sqlite.
  *
- *   POST /api/matches/import  multipart: file=<.mat>, replace=1 (optional)
+ *   POST /api/matches/import  multipart: file=<.mat>, replace=1 (optional), player=auto|1|2 (optional)
  *   -> application/x-ndjson, one {"event": ...} object per line (see import_match.py), plus
  *      "saved", "log" (the importer's stderr) and "exit" events from this route.
+ *
+ * player is the user's side in the file; auto (the default) lets the importer read it from Galaxy's
+ * export name, <you>_<opponent>_<date>_<match id>.mat, so the saved copy keeps the upload's name.
  *
  * uv is found through BG_UV or on PATH. Errors before the import starts are plain JSON
  * { error } responses; anything after that arrives as an "error" event in the stream.
@@ -35,6 +38,8 @@ export async function POST(req: Request) {
   if (!/^\s*\d+\s+point\s+match/im.test(text)) return bad(`${file.name}: not a .mat match file (no "N point match" line)`);
   const replaceFlag = form?.get("replace");
   const replace = replaceFlag === "1" || replaceFlag === "true";
+  const player = String(form?.get("player") ?? "auto");
+  if (!["auto", "1", "2"].includes(player)) return bad("player must be auto, 1 or 2");
   const uv = findUv();
   if (!uv) return bad(UV_MISSING, 500);
 
@@ -42,6 +47,6 @@ export async function POST(req: Request) {
   const target = path.join(MATCHES_DIR, safeFileName(file.name, ".mat"));
   writeFileSync(target, text, "utf8");
 
-  const args = ["run", "import_match.py", target, "--json", "--player", "1", ...(replace ? ["--replace"] : [])];
+  const args = ["run", "import_match.py", target, "--json", "--player", player, ...(replace ? ["--replace"] : [])];
   return streamProcess(uv, args, { cwd: PIPELINE_DIR, first: [{ event: "saved", file: path.basename(target) }] });
 }
